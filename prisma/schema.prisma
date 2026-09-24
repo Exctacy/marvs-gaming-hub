@@ -1,0 +1,137 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Branch {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  address   String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  staffProfiles StaffProfile[]
+  gamingReports GamingReport[]
+  gamingConfig  GamingHubConfig?
+  auditLogs     AuditLog[]
+  notifications Notification[]
+}
+
+model StaffProfile {
+  id                 String    @id @default(cuid())
+  username           String    @unique
+  passwordHash       String
+  salt               String
+  mustChangePassword Boolean   @default(true)
+  fullName           String
+  email              String?
+  role               String    // super_admin | admin | management | counter_admin | computer_tech | team_leader
+  branchId           String?
+  status             String    @default("active") // active | inactive
+  activatedAt        DateTime?
+  deactivatedAt      DateTime?
+  createdById        String?
+  createdByName      String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  branch   Branch?       @relation(fields: [branchId], references: [id])
+  sessions StaffSession[]
+
+  @@index([branchId, status])
+}
+
+model StaffSession {
+  id        String   @id @default(cuid())
+  staffId   String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  staff StaffProfile @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([staffId])
+  @@index([expiresAt])
+}
+
+model GamingReport {
+  id            String   @id @default(cuid())
+  branchId      String
+  reportDate    DateTime
+  shift         String   // Opening | Mid | Night
+  adminName     String?
+  techName      String?
+  status        String   @default("draft") // draft | submitted
+  changes       String?
+  followUp      String?
+  reportData    String   // JSON string of report_data object
+  createdByName String
+  createdById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  branch Branch @relation(fields: [branchId], references: [id])
+
+  @@index([branchId, reportDate])
+  @@index([branchId, status, reportDate])
+}
+
+model GamingHubConfig {
+  id               String   @id @default(cuid())
+  branchId         String   @unique
+  standardPcs      String   @default("[]") // JSON array
+  vipPcs           String   @default("[]")
+  games            String   @default("[]")
+  gameStatuses     String   @default("[]")
+  shiftPcs         String   @default("{}") // JSON object
+  spareTypes       String   @default("[]")
+  peripheralBrands String   @default("{}") // JSON object by category
+  updatedAt        DateTime @updatedAt
+
+  branch Branch @relation(fields: [branchId], references: [id])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  branchId    String?
+  userId      String?
+  userName    String
+  role        String
+  action      String
+  entity      String
+  entityId    String?
+  description String
+  createdAt   DateTime @default(now())
+
+  branch Branch? @relation(fields: [branchId], references: [id])
+
+  @@index([branchId, createdAt])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  audience  String   @default("staff")
+  title     String
+  message   String
+  type      String   @default("info")
+  read      Boolean  @default(false)
+  link      String?
+  branchId  String?
+  createdAt DateTime @default(now())
+
+  branch Branch? @relation(fields: [branchId], references: [id])
+}
+
+model SystemSettings {
+  id           String @id @default("default")
+  businessName String @default("MARVS Gaming Hub")
+  logoUrl      String?
+  systemName   String @default("Gaming Hub Management System")
+  updatedAt    DateTime @updatedAt
+}
