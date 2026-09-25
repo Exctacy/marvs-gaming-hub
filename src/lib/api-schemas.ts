@@ -1,6 +1,14 @@
 import { z } from "zod";
 
-const optionalText = z.string().trim().nullable().optional();
+const optionalText = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() === "" ? null : value),
+  z.string().trim().nullable().optional()
+);
+
+const optionalId = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() === "" ? null : value),
+  z.string().trim().nullable().optional()
+);
 
 export const reportSchema = z.object({
   branchId: z.string().min(1).optional(),
@@ -44,8 +52,8 @@ export const staffCreateSchema = z.object({
     "computer_tech",
     "team_leader",
   ]).default("counter_admin"),
-  branch_id: z.string().nullable().optional(),
-  branchId: z.string().nullable().optional(),
+  branch_id: optionalId,
+  branchId: optionalId,
 }).refine((data) => Boolean(data.full_name || data.fullName), {
   message: "Username and full name are required",
   path: ["full_name"],
@@ -65,6 +73,6 @@ export const staffActionSchema = z.object({
   action: z.enum(["reset_password", "deactivate", "activate", "change_role", "change_branch"]),
   new_role: z.string().optional(),
   newRole: z.string().optional(),
-  new_branch_id: z.string().nullable().optional(),
-  newBranchId: z.string().nullable().optional(),
+  new_branch_id: optionalId,
+  newBranchId: optionalId,
 });

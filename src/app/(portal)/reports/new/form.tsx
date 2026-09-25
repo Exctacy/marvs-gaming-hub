@@ -140,11 +140,15 @@ export default function NewGamingReportForm() {
             tSig && typeof tSig === "object" ? tSig.image_url || null : typeof tSig === "string" ? tSig : null
           );
         } else {
-          // Carry-forward from latest report
+          // Carry-forward from the preceding shift when available.
           try {
-            const ld = await fetch(`/api/reports?branchId=${branchId}&limit=1`).then((r) =>
-              r.json()
-            );
+            const previousShift = shift === "Opening" ? "Night" : shift === "Mid" ? "Opening" : "Mid";
+            const carryDate = new Date(`${reportDate}T00:00:00.000Z`);
+            if (shift === "Opening") carryDate.setUTCDate(carryDate.getUTCDate() - 1);
+            const date = carryDate.toISOString().slice(0, 10);
+            const ld = await fetch(
+              `/api/reports?branchId=${branchId}&date=${date}&shift=${previousShift}&limit=1`
+            ).then((r) => r.json());
             const all = ld.reports || [];
             if (all.length) {
               const latest = all[0];
@@ -180,7 +184,7 @@ export default function NewGamingReportForm() {
                 });
               }
               setCarryNote(
-                `Pre-filled from previous report (${String(latest.reportDate).slice(0, 10)}). Update only what changed.`
+                `Pre-filled from the previous ${previousShift} shift (${String(latest.reportDate).slice(0, 10)}). Update only what changed; these fields may be left blank.`
               );
             }
           } catch {
@@ -193,7 +197,7 @@ export default function NewGamingReportForm() {
         setLoading(false);
       }
     })();
-  }, [branchId, editId]);
+  }, [branchId, editId, reportDate, shift]);
 
   const toggleGame = (game: string, status: string) =>
     setGameStatus((p) => {

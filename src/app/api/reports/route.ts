@@ -18,12 +18,14 @@ export async function GET(req: NextRequest) {
   const includeData = searchParams.get("includeData") === "1";
   const limit = Math.min(includeData ? 500 : 100, Math.max(1, parseInt(searchParams.get("limit") || "5") || 5));
   const status = searchParams.get("status");
+  const shift = searchParams.get("shift");
   const date = searchParams.get("date");
   const query = searchParams.get("q")?.trim();
   const skip = (page - 1) * limit;
 
   const where: any = { branchId };
   if (status) where.status = status;
+  if (shift) where.shift = shift;
   if (date) {
     const start = new Date(`${date}T00:00:00.000Z`);
     const end = new Date(start);

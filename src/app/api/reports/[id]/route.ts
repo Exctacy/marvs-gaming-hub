@@ -66,11 +66,11 @@ export async function PUT(
     data: {
       reportDate: body.reportDate ? new Date(body.reportDate) : undefined,
       shift: body.shift,
-      adminName: body.adminName ?? undefined,
-      techName: body.techName ?? undefined,
+      adminName: body.adminName === undefined ? undefined : body.adminName,
+      techName: body.techName === undefined ? undefined : body.techName,
       status: body.status || "draft",
-      changes: body.changes ?? undefined,
-      followUp: body.followUp ?? undefined,
+      changes: body.changes === undefined ? undefined : body.changes,
+      followUp: body.followUp === undefined ? undefined : body.followUp,
       reportData: body.reportData ? JSON.stringify(body.reportData) : undefined,
     },
   });
