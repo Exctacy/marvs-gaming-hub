@@ -124,7 +124,7 @@ export default function StaffGamingConfigPage() {
   }
 
   return (
-    <div className="max-w-4xl space-y-5 pb-8">
+    <div className="max-w-6xl space-y-5 pb-8">
       <div>
         <h1 className="text-2xl font-bold text-navy-900">Gaming Config</h1>
         <p className="text-sm text-muted-foreground">
@@ -145,13 +145,13 @@ export default function StaffGamingConfigPage() {
       )}
 
       <ReportSection title="PC Numbers" eyebrow="PC LISTS">
-        <div className="space-y-4">
+        <div className="grid gap-5 lg:grid-cols-2">
           <div>
             <p className="text-sm font-semibold text-navy-900 mb-2">Standard PCs</p>
             <ListEditor
               items={config.standard_pcs}
               onChange={(v) => set("standard_pcs", v)}
-              placeholder="e.g. 1 or PC 1"
+              placeholder="Add PC number, e.g. N-PC-05"
               disabled={!canEdit}
             />
           </div>
@@ -160,7 +160,7 @@ export default function StaffGamingConfigPage() {
             <ListEditor
               items={config.vip_pcs}
               onChange={(v) => set("vip_pcs", v)}
-              placeholder="e.g. VIP-01"
+              placeholder="Add VIP PC, e.g. N-VIP-03"
               disabled={!canEdit}
             />
           </div>
@@ -172,7 +172,7 @@ export default function StaffGamingConfigPage() {
           When set, only these PCs show for that shift&apos;s report (overriding the
           standard list). Leave empty to use the standard PCs.
         </p>
-        <div className="space-y-4">
+        <div className="grid gap-5 lg:grid-cols-3">
           {SHIFTS.map((s) => (
             <div key={s}>
               <p className="text-sm font-semibold text-navy-900 mb-2">
@@ -181,7 +181,7 @@ export default function StaffGamingConfigPage() {
               <ListEditor
                 items={config.shift_pcs[s] || []}
                 onChange={(v) => setShiftPcs(s, v)}
-                placeholder="e.g. 19"
+                placeholder="Add PC number"
                 disabled={!canEdit}
               />
             </div>
@@ -193,17 +193,17 @@ export default function StaffGamingConfigPage() {
         <ListEditor
           items={config.games}
           onChange={(v) => set("games", v)}
-          placeholder="e.g. Valorant"
+          placeholder="Add a game, e.g. Valorant"
           disabled={!canEdit}
         />
-        <div className="mt-4">
+        <div className="mt-5">
           <p className="text-sm font-semibold text-navy-900 mb-2">
             Game Status Options
           </p>
           <ListEditor
             items={config.game_statuses}
             onChange={(v) => set("game_statuses", v)}
-            placeholder="e.g. Updated"
+            placeholder="Add a status, e.g. Updated"
             disabled={!canEdit}
           />
         </div>
@@ -213,20 +213,20 @@ export default function StaffGamingConfigPage() {
         <ListEditor
           items={config.spare_types}
           onChange={(v) => set("spare_types", v)}
-          placeholder="e.g. Keyboard"
+          placeholder="Add spare type, e.g. Keyboard"
           disabled={!canEdit}
         />
       </ReportSection>
 
       <ReportSection title="Peripheral Brands" eyebrow="BRANDS">
-        <div className="space-y-4">
+        <div className="grid gap-5 sm:grid-cols-2">
           {PERIPHERAL_CATEGORIES.map(({ key, label }) => (
             <div key={key}>
               <p className="text-sm font-semibold text-navy-900 mb-2">{label}</p>
               <ListEditor
                 items={config.peripheral_brands[key] || []}
                 onChange={(v) => setBrands(key, v)}
-                placeholder="e.g. RED DRAGON"
+                placeholder="Add brand, e.g. RED DRAGON"
                 disabled={!canEdit}
               />
             </div>

@@ -9,7 +9,6 @@ import {
   Settings2,
   BarChart3,
   Users,
-  Building2,
   ScrollText,
   Settings,
   BookOpen,
@@ -61,7 +60,6 @@ const sections: NavSection[] = [
     title: "Administration",
     items: [
       { label: "Staff Management", href: "/staff", icon: Users, roles: ["super_admin", "admin", "management"] },
-      { label: "Branches", href: "/branches", icon: Building2, roles: ["super_admin"] },
       { label: "Audit Logs", href: "/audit", icon: ScrollText, roles: ["super_admin", "admin", "management"] },
       { label: "Settings", href: "/settings", icon: Settings, roles: ["super_admin", "admin", "management"] },
       { label: "Staff Guide", href: "/guide", icon: BookOpen },
@@ -75,12 +73,9 @@ interface SidebarProps {
     role: string;
     branch?: { name: string; code: string } | null;
   };
-  branches?: { id: string; name: string; code: string }[];
-  currentBranchId?: string | null;
-  onBranchChange?: (id: string) => void;
 }
 
-export function Sidebar({ user, branches = [], currentBranchId, onBranchChange }: SidebarProps) {
+export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -90,8 +85,6 @@ export function Sidebar({ user, branches = [], currentBranchId, onBranchChange }
     "Hub Management & Analytics": true,
     Administration: true,
   });
-
-  const canSwitch = user.role === "super_admin" || user.role === "management";
 
   function toggleSection(title: string) {
     setOpenSections((prev) => ({ ...prev, [title]: !prev[title] }));
@@ -116,23 +109,6 @@ export function Sidebar({ user, branches = [], currentBranchId, onBranchChange }
           <p className="text-xs text-navy-300">Staff Portal</p>
         </div>
       </div>
-
-      {canSwitch && branches.length > 0 && (
-        <div className="px-3 py-3 border-b border-navy-800">
-          <label className="text-xs text-navy-400 mb-1 block">Active Branch</label>
-          <select
-            className="w-full bg-navy-800 text-white text-sm rounded-md border border-navy-700 px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
-            value={currentBranchId || ""}
-            onChange={(e) => onBranchChange?.(e.target.value)}
-          >
-            {branches.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name} ({b.code})
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
 
       <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1">
         {sections.map((section) => {

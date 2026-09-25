@@ -77,6 +77,12 @@ export default function StaffSettingsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (branchId && branches.some((b) => b.id === branchId)) {
+      setViewBranch(branchId);
+    }
+  }, [branchId, branches]);
+
   const applyBranch = () => {
     if (!viewBranch) return;
     setBranchId(viewBranch);
@@ -212,8 +218,8 @@ export default function StaffSettingsPage() {
             <Building2 className="w-4 h-4" /> Branch View
           </div>
           <p className="text-xs text-muted-foreground">
-            As Super Admin or Management you are not assigned to a single branch.
-            Choose which branch&apos;s data to view across the portal.
+            Choose the branch whose reports, dashboard, hub overview, and gaming
+            configuration you want to view. Your selection is remembered after refresh.
           </p>
           {branchLoading ? (
             <div className="flex justify-center py-4">
@@ -385,8 +391,8 @@ export default function StaffSettingsPage() {
 
       {!isSuperAdmin && !isManagement && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
-          Only Super Admin can edit system settings and branches. Management can
-          switch branch view from the sidebar.
+          Only Super Admin can edit system settings and branches. Super Admin and
+          Management can switch the active branch from Settings.
         </div>
       )}
 

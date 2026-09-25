@@ -1,8 +1,9 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
+import type { KeyboardEvent } from "react";
+import { Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 
 interface ListEditorProps {
   items: string[];
@@ -17,51 +18,78 @@ export default function ListEditor({
   placeholder = "Add item…",
   disabled = false,
 }: ListEditorProps) {
-  const update = (i: number, val: string) => {
-    const next = [...items];
-    next[i] = val;
-    onChange(next);
+  const [draft, setDraft] = useState("");
+  const visibleItems = items.filter((item) => item.trim());
+
+  const add = () => {
+    const value = draft.trim();
+    if (!value) return;
+
+    // Avoid duplicate entries while keeping the configured value's casing.
+    if (items.some((item) => item.trim().toLowerCase() === value.toLowerCase())) {
+      setDraft("");
+      return;
+    }
+
+    onChange([...items.filter((item) => item.trim()), value]);
+    setDraft("");
   };
 
-  const remove = (i: number) => onChange(items.filter((_, idx) => idx !== i));
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      add();
+    }
+  };
 
-  const add = () => onChange([...items, ""]);
+  const remove = (index: number) => {
+    if (disabled) return;
+    onChange(items.filter((_, itemIndex) => itemIndex !== index));
+  };
 
   return (
-    <div className="space-y-2">
-      {items.length === 0 && (
-        <p className="text-xs text-muted-foreground">No items yet.</p>
-      )}
-      {items.map((item, i) => (
-        <div key={i} className="flex gap-2">
-          <Input
-            value={item}
-            onChange={(e) => update(i, e.target.value)}
-            placeholder={placeholder}
+    <div className="flex flex-wrap items-center gap-1.5">
+      {items.map((item, index) => {
+        if (!item.trim()) return null;
+        return (
+          <button
+            key={`${item}-${index}`}
+            type="button"
             disabled={disabled}
-            className="flex-1"
-          />
-          {!disabled && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="text-red-500 hover:text-red-700 shrink-0"
-              onClick={() => remove(i)}
-            >
-              <Trash2 className="w-4 h-4" />
-            </Button>
-          )}
-        </div>
-      ))}
+            title={disabled ? item : "Click to remove"}
+            aria-label={disabled ? item : `Remove ${item}`}
+            onClick={() => remove(index)}
+            className="inline-flex max-w-full items-center rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-800 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:cursor-default disabled:border-border disabled:bg-muted disabled:text-muted-foreground"
+          >
+            <span className="truncate">{item}</span>
+          </button>
+        );
+      })}
+
       {!disabled && (
-        <button
-          type="button"
-          onClick={add}
-          className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
-        >
-          <Plus className="w-3.5 h-3.5" /> Add
-        </button>
+        <div className="flex min-w-[220px] flex-1 items-center gap-1.5 basis-[220px] max-w-sm">
+          <Input
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            className="h-8 min-w-0 flex-1 text-sm"
+            aria-label={placeholder}
+          />
+          <button
+            type="button"
+            onClick={add}
+            disabled={!draft.trim()}
+            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-blue-200 px-2 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add
+          </button>
+        </div>
+      )}
+
+      {visibleItems.length === 0 && disabled && (
+        <p className="text-xs text-muted-foreground">No items yet.</p>
       )}
     </div>
   );
