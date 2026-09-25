@@ -58,12 +58,9 @@ export default function StaffManagementPage() {
   const [open, setOpen] = useState(false);
   const [username, setUsername] = useState("");
   const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
   const [role, setRole] = useState("counter_admin");
   const [branch, setBranch] = useState("");
   const [creating, setCreating] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [confirm, setConfirm] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [limit, setLimit] = useState(5);
@@ -104,10 +101,8 @@ export default function StaffManagementPage() {
     branches.find((b) => b.id === id)?.name || "—";
 
   const create = async () => {
-    setError("");
-    setSuccess("");
     if (!username || !fullName) {
-      setError("Username and full name are required");
+      toast.error("Username and full name are required");
       return;
     }
     setCreating(true);
@@ -118,7 +113,6 @@ export default function StaffManagementPage() {
         body: JSON.stringify({
           username,
           full_name: fullName,
-          email,
           role,
           branch_id:
             role === "management" || role === "super_admin"
@@ -130,20 +124,15 @@ export default function StaffManagementPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Creation failed");
-      setSuccess(
-        `Staff account created for ${fullName}. Temporary password is "123". They must change it on first login.`
-      );
       toast.success("Staff account created", {
         description: `${fullName} can sign in with temporary password "123".`,
       });
       setUsername("");
       setFullName("");
-      setEmail("");
       setRole("counter_admin");
       setOpen(false);
       load();
     } catch (e: any) {
-      setError(e.message);
       toast.error("Creation failed", { description: e.message });
     } finally {
       setCreating(false);
@@ -168,9 +157,6 @@ export default function StaffManagementPage() {
       variant: "default",
       action: async () => {
         await patch(p.id, { action: "reset_password" });
-        setSuccess(
-          `Password reset for ${p.full_name || p.fullName}. Temporary password is "123".`
-        );
       },
     });
   };
@@ -224,15 +210,12 @@ export default function StaffManagementPage() {
   const executeConfirm = async () => {
     if (!confirm) return;
     setBusy(true);
-    setError("");
     try {
       await confirm.action();
       setConfirm(null);
-      setSuccess(confirm.title + " completed successfully.");
       toast.success(confirm.title, { description: "Completed successfully." });
       load();
     } catch (e: any) {
-      setError(e.message);
       toast.error("Action failed", { description: e.message });
     } finally {
       setBusy(false);
@@ -250,28 +233,13 @@ export default function StaffManagementPage() {
         </div>
         {canManageStaff && (
           <Button
-            onClick={() => {
-              setOpen(true);
-              setError("");
-              setSuccess("");
-            }}
+            onClick={() => setOpen(true)}
             className="bg-blue-700 hover:bg-blue-800"
           >
             <UserPlus className="w-4 h-4 mr-2" /> Create Staff
           </Button>
         )}
       </div>
-
-      {success && (
-        <div className="p-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm">
-          {success}
-        </div>
-      )}
-      {error && !open && (
-        <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-          {error}
-        </div>
-      )}
 
       {loading ? (
         <div className="flex justify-center py-16">
@@ -452,11 +420,6 @@ export default function StaffManagementPage() {
               Create Staff Account
             </h3>
             <div className="space-y-3">
-              {error && (
-                <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-                  {error}
-                </div>
-              )}
               <div>
                 <Label>Full Name *</Label>
                 <Input
@@ -472,16 +435,6 @@ export default function StaffManagementPage() {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder="e.g. juan.staff"
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <Label>Email (optional)</Label>
-                <Input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="staff@marvs.com"
                   className="mt-1"
                 />
               </div>

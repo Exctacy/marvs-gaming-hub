@@ -20,8 +20,6 @@ export default function StaffGamingConfigPage() {
   const [config, setConfig] = useState<GamingConfig | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [saved, setSaved] = useState(false);
   const canEdit = ["super_admin", "admin", "management", "computer_tech"].includes(
     user?.role || ""
   );
@@ -35,7 +33,9 @@ export default function StaffGamingConfigPage() {
         );
         setConfig(mergeConfig(d.config));
       } catch (e: any) {
-        setError(e.message || "Failed to load");
+        toast.error("Failed to load configuration", {
+          description: e.message || "Please try again.",
+        });
       } finally {
         setLoading(false);
       }
@@ -44,7 +44,6 @@ export default function StaffGamingConfigPage() {
 
   const set = (field: keyof GamingConfig, value: any) => {
     setConfig((c) => (c ? { ...c, [field]: value } : c));
-    setSaved(false);
   };
   const setShiftPcs = (shift: string, value: string[]) =>
     setConfig((c) =>
@@ -63,8 +62,6 @@ export default function StaffGamingConfigPage() {
   const save = async () => {
     if (!config || !branchId) return;
     setSaving(true);
-    setError("");
-    setSaved(false);
     try {
       // Filter empty strings from lists before save
       const cleanList = (arr: string[]) =>
@@ -96,12 +93,10 @@ export default function StaffGamingConfigPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Save failed");
       setConfig(mergeConfig(data.config));
-      setSaved(true);
       toast.success("Configuration saved", {
         description: "Hub setup updated successfully.",
       });
     } catch (e: any) {
-      setError(e.message);
       toast.error("Save failed", { description: e.message });
     } finally {
       setSaving(false);
@@ -115,13 +110,7 @@ export default function StaffGamingConfigPage() {
       </div>
     );
   }
-  if (!config) {
-    return (
-      <div className="p-6 text-center text-red-600 text-sm">
-        {error || "Unable to load hub configuration. Please try again."}
-      </div>
-    );
-  }
+  if (!config) return null;
 
   return (
     <div className="max-w-6xl space-y-5 pb-8">
@@ -132,17 +121,6 @@ export default function StaffGamingConfigPage() {
           gaming hub reports.
         </p>
       </div>
-
-      {error && (
-        <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-          {error}
-        </div>
-      )}
-      {saved && (
-        <div className="p-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm">
-          Configuration saved.
-        </div>
-      )}
 
       <ReportSection title="PC Numbers" eyebrow="PC LISTS">
         <div className="grid gap-5 lg:grid-cols-2">

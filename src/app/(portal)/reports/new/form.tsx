@@ -73,7 +73,6 @@ export default function NewGamingReportForm() {
   const [existingTechSig, setExistingTechSig] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [carryNote, setCarryNote] = useState("");
 
   useEffect(() => {
@@ -98,12 +97,12 @@ export default function NewGamingReportForm() {
           const d = await fetch(`/api/reports/${editId}`).then((r) => r.json());
           const r = d.report;
           if (!r) {
-            setError("Report not found.");
+            toast.error("Report not found.");
             setLoading(false);
             return;
           }
           if (r.status !== "draft") {
-            setError("This report is already submitted and cannot be edited.");
+            toast.error("This report is already submitted and cannot be edited.");
             setLoading(false);
             return;
           }
@@ -192,7 +191,9 @@ export default function NewGamingReportForm() {
           }
         }
       } catch (e: any) {
-        setError(e.message || "Failed to load configuration.");
+        toast.error("Failed to load report", {
+          description: e.message || "Failed to load configuration.",
+        });
       } finally {
         setLoading(false);
       }
@@ -266,13 +267,12 @@ export default function NewGamingReportForm() {
   });
 
   const save = async (status: "draft" | "submitted") => {
-    setError("");
     if (!reportDate || !shift || !adminName) {
-      setError("Date, shift, and admin name are required.");
+      toast.error("Date, shift, and admin name are required.");
       return;
     }
     if (!branchId) {
-      setError("No branch selected.");
+      toast.error("No branch selected.");
       return;
     }
     setSaving(true);
@@ -313,8 +313,9 @@ export default function NewGamingReportForm() {
       router.push(data.id ? `/reports/${data.id}` : "/reports");
       router.refresh();
     } catch (e: any) {
-      setError(e.message || "Failed to save report.");
-      toast.error("Save failed", { description: e.message });
+      toast.error("Save failed", {
+        description: e.message || "Failed to save report.",
+      });
     } finally {
       setSaving(false);
     }
@@ -395,12 +396,6 @@ export default function NewGamingReportForm() {
           <span>{carryNote}</span>
         </div>
       )}
-      {error && (
-        <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-          {error}
-        </div>
-      )}
-
       <datalist id="peripheral-brands">
         {allBrands.map((b) => (
           <option key={b} value={b} />

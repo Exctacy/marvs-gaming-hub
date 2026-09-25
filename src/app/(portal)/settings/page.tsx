@@ -30,12 +30,10 @@ export default function StaffSettingsPage() {
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
 
   const [branches, setBranches] = useState<any[]>([]);
   const [branchLoading, setBranchLoading] = useState(true);
-  const [branchError, setBranchError] = useState("");
   const [editing, setEditing] = useState<any>(null);
   const [confirm, setConfirm] = useState<any>(null);
   const [busy, setBusy] = useState(false);
@@ -51,7 +49,7 @@ export default function StaffSettingsPage() {
         logo_url: s.logo_url || "",
       });
     } catch (e: any) {
-      setError(e.message);
+      toast.error("Failed to load settings", { description: e.message });
     } finally {
       setLoading(false);
     }
@@ -65,7 +63,7 @@ export default function StaffSettingsPage() {
       setBranches(list);
       setViewBranch(branchId || list[0]?.id || "");
     } catch (e: any) {
-      setBranchError(e.message);
+      toast.error("Failed to load branches", { description: e.message });
     } finally {
       setBranchLoading(false);
     }
@@ -94,7 +92,6 @@ export default function StaffSettingsPage() {
   const save = async () => {
     if (!form) return;
     setSaving(true);
-    setError("");
     setSaved(false);
     try {
       const res = await fetch("/api/settings", {
@@ -110,7 +107,6 @@ export default function StaffSettingsPage() {
       });
       setTimeout(() => setSaved(false), 2500);
     } catch (e: any) {
-      setError(e.message);
       toast.error("Save failed", { description: e.message });
     } finally {
       setSaving(false);
@@ -119,11 +115,10 @@ export default function StaffSettingsPage() {
 
   const saveBranch = async () => {
     if (!editing?.name) {
-      setBranchError("Branch name is required.");
+      toast.error("Branch name is required.");
       return;
     }
     setBusy(true);
-    setBranchError("");
     try {
       if (editing.id) {
         const res = await fetch(`/api/branches/${editing.id}`, {
@@ -156,7 +151,6 @@ export default function StaffSettingsPage() {
       setEditing(null);
       loadBranches();
     } catch (e: any) {
-      setBranchError(e.message);
       toast.error("Save failed", { description: e.message });
     } finally {
       setBusy(false);
@@ -183,12 +177,10 @@ export default function StaffSettingsPage() {
   const executeConfirm = async () => {
     if (!confirm) return;
     setBusy(true);
-    setBranchError("");
     try {
       await confirm.action();
       setConfirm(null);
     } catch (e: any) {
-      setBranchError(e.message);
       toast.error("Action failed", { description: e.message });
     } finally {
       setBusy(false);
@@ -253,11 +245,6 @@ export default function StaffSettingsPage() {
       {isSuperAdmin && form && (
         <>
           <div className="bg-white rounded-xl border border-border p-6 space-y-4">
-            {error && (
-              <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-                {error}
-              </div>
-            )}
             <div className="flex items-center gap-2 text-navy-900 font-semibold pb-2 border-b border-border">
               <SettingsIcon className="w-4 h-4" /> Business
             </div>
@@ -330,11 +317,6 @@ export default function StaffSettingsPage() {
             <p className="text-xs text-muted-foreground">
               Each branch keeps its own hub setup, reports, and operational data.
             </p>
-            {branchError && (
-              <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-                {branchError}
-              </div>
-            )}
             {branchLoading ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="w-5 h-5 animate-spin text-navy-700" />
@@ -404,11 +386,6 @@ export default function StaffSettingsPage() {
               {editing.id ? "Edit Branch" : "Add Branch"}
             </h3>
             <div className="space-y-3">
-              {branchError && (
-                <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
-                  {branchError}
-                </div>
-              )}
               <div>
                 <Label>Branch Name *</Label>
                 <Input

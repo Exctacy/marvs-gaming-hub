@@ -30,7 +30,6 @@ model StaffProfile {
   salt               String
   mustChangePassword Boolean   @default(true)
   fullName           String
-  email              String?
   role               String    // super_admin | admin | management | counter_admin | computer_tech | team_leader
   branchId           String?
   status             String    @default("active") // active | inactive

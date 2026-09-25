@@ -29,7 +29,6 @@ export async function GET(req: NextRequest) {
       id: true,
       username: true,
       fullName: true,
-      email: true,
       role: true,
       branchId: true,
       status: true,
@@ -68,7 +67,6 @@ export async function POST(req: NextRequest) {
     .toLowerCase()
     .trim();
   const fullName = String(body.full_name || body.fullName || "").trim();
-  const email = body.email ? String(body.email).trim() : null;
   const role = String(body.role || "counter_admin");
   let branchId = body.branch_id || body.branchId || null;
 
@@ -104,7 +102,6 @@ export async function POST(req: NextRequest) {
     data: {
       username,
       fullName,
-      email,
       role,
       branchId,
       passwordHash: hash,

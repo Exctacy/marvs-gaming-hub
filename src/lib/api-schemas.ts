@@ -43,7 +43,6 @@ export const staffCreateSchema = z.object({
   username: z.string().trim().min(1).max(100),
   full_name: z.string().trim().min(1).max(160).optional(),
   fullName: z.string().trim().min(1).max(160).optional(),
-  email: z.string().trim().email().nullable().optional(),
   role: z.enum([
     "super_admin",
     "admin",
