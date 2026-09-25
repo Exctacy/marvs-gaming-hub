@@ -1,4 +1,9 @@
 /** Client-side Hub Overview aggregate PDF with optional e-sign. */
+import { PERIPHERAL_CATEGORIES } from "@/lib/gamingReportData";
+
+const fmtDate = (d: any) =>
+  d ? new Date(d).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" }) : "";
+
 export async function downloadHubOverviewPdf(opts: {
   rangeLabel: string;
   reportsCount: number;
@@ -19,31 +24,50 @@ export async function downloadHubOverviewPdf(opts: {
   if (typeof window === "undefined") throw new Error("Browser only");
   const { default: jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "pt", format: "a4" });
-  const margin = 40;
+  const margin = 44;
   let y = margin;
   const pageW = doc.internal.pageSize.getWidth();
-  const maxW = pageW - margin * 2;
   const pageH = doc.internal.pageSize.getHeight();
+  const maxW = pageW - margin * 2;
 
-  const ensure = (need = 20) => {
-    if (y + need > pageH - margin) {
+  const ensure = (needed: number) => {
+    if (y + needed > pageH - margin) {
       doc.addPage();
       y = margin;
     }
   };
-  const line = (text: string, size = 11, style: "normal" | "bold" = "normal") => {
-    doc.setFont("helvetica", style);
+
+  const para = (
+    text: string,
+    {
+      size = 11,
+      bold = false,
+      color = [30, 41, 70] as [number, number, number],
+      indent = 0,
+    }: { size?: number; bold?: boolean; color?: [number, number, number]; indent?: number } = {}
+  ) => {
     doc.setFontSize(size);
-    const lines = doc.splitTextToSize(String(text), maxW);
-    ensure(lines.length * (size + 4) + 4);
-    doc.text(lines, margin, y);
-    y += lines.length * (size + 4) + 4;
-  };
-  const section = (t: string) => {
-    y += 8;
-    line(t, 13, "bold");
+    doc.setFont("helvetica", bold ? "bold" : "normal");
+    doc.setTextColor(...color);
+    const lines = doc.splitTextToSize(String(text || ""), maxW - indent);
+    lines.forEach((ln: string) => {
+      ensure(size + 6);
+      doc.text(ln, margin + indent, y);
+      y += size + 5;
+    });
   };
 
+  const heading = (text: string) => {
+    y += 10;
+    ensure(40);
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(11, 28, 76);
+    doc.text(text, margin, y);
+    y += 18;
+  };
+
+  // Header
   doc.setFillColor(7, 30, 76);
   doc.rect(0, 0, pageW, 64, "F");
   doc.setTextColor(255, 255, 255);
@@ -56,76 +80,81 @@ export async function downloadHubOverviewPdf(opts: {
   doc.setTextColor(20, 20, 20);
   y = 84;
 
-  line(`Reports in range: ${opts.reportsCount}`);
-  line(`Defective PCs: ${opts.recurring.length}`);
-  line(`Open follow-ups: ${opts.followUps.length}`);
+  para(`Generated: ${new Date().toLocaleString("en-PH")}`, { size: 10, color: [110, 120, 140] });
 
-  section("Overall Peripherals Count");
+  heading("SUMMARY");
+  para(`Reports in range: ${opts.reportsCount}`, { bold: true });
+  para(`Recurring defective PCs: ${opts.recurring.filter((x) => x.count >= 2).length}`, { bold: true });
+  para(`Open follow-ups: ${opts.followUps.length}`, { bold: true });
+
+  heading("OVERALL PERIPHERALS COUNT");
   let anyCount = false;
-  for (const [cat, brands] of Object.entries(opts.overallCounts || {})) {
+  PERIPHERAL_CATEGORIES.forEach(({ key, label }) => {
+    const brands = opts.overallCounts[key] || {};
     const entries = Object.entries(brands).filter(([, q]) => q > 0);
-    if (!entries.length) continue;
-    anyCount = true;
-    line(cat, 11, "bold");
-    for (const [b, q] of entries) line(`  ${b}: ${q}`);
-  }
-  if (!anyCount) line("No data.");
-
-  section("Defective PCs");
-  if (!opts.recurring.length) line("None.");
-  else {
-    for (const x of opts.recurring) {
-      line(
-        `PC ${x.pc}${x.count >= 2 ? " [RECURRING]" : ""} — ${x.brands.join(" · ")} (in ${x.count} report${x.count > 1 ? "s" : ""})`
-      );
+    if (entries.length) {
+      anyCount = true;
+      para(`${label}:`, { bold: true });
+      entries.forEach(([brand, q]) => para(`${brand} - ${q}`, { indent: 12 }));
     }
-  }
+  });
+  if (!anyCount) para("None.");
 
-  section("Changes Summary");
-  if (!opts.changesSummary.length) line("None.");
+  heading("DEFECTIVE PCs");
+  if (!opts.recurring.length) para("None.");
+  else
+    opts.recurring.forEach((x) =>
+      para(
+        `PC ${x.pc} — in ${x.count} report(s)${x.count >= 2 ? " [Recurring]" : ""} — ${x.brands.join(", ")}`
+      )
+    );
+
+  heading("LATEST PC NO-DEFECT STATE");
+  if (!opts.latestMeta) para("None.");
   else {
-    for (const r of opts.changesSummary) {
-      const date = String(r.reportDate || r.report_date || "").slice(0, 10);
-      line(`${date} — ${r.shift}`, 11, "bold");
-      line(r.changes || "");
-    }
+    para(`From ${opts.latestMeta}`, { size: 10, color: [110, 120, 140] });
+    para(opts.latestNoDefect.length ? `PC - ${opts.latestNoDefect.join(", ")}` : "No no-defect PCs recorded.");
   }
 
-  section("Latest PC No-Defect State");
-  if (opts.latestMeta) line(`From ${opts.latestMeta}`);
-  line(opts.latestNoDefect.length ? opts.latestNoDefect.join(", ") : "None.");
+  heading("GAME STATUS SUMMARY (LATEST)");
+  if (!opts.gameEntries.length) para("None.");
+  else opts.gameEntries.forEach(([game, status]) => para(`• ${game} — ${status}`));
 
-  section("Game Status Summary");
-  if (!opts.gameEntries.length) line("None.");
-  else for (const [g, s] of opts.gameEntries) line(`${g}: ${s}`);
+  heading("CHANGES SUMMARY");
+  if (!opts.changesSummary.length) para("None.");
+  else
+    opts.changesSummary.forEach((r) => {
+      const date = r.reportDate ?? r.report_date;
+      para(`${fmtDate(date)} — ${r.shift} shift`, { bold: true, size: 10, color: [110, 120, 140] });
+      para(r.changes);
+    });
 
-  section("Open Follow-ups");
-  if (!opts.followUps.length) line("None.");
-  else {
-    for (const r of opts.followUps) {
-      const date = String(r.reportDate || r.report_date || "").slice(0, 10);
-      line(`${date} — ${r.shift}`, 11, "bold");
-      line(r.followUp || r.follow_up || "");
-    }
-  }
+  heading("OPEN FOLLOW-UPS");
+  if (!opts.followUps.length) para("None.");
+  else
+    opts.followUps.forEach((r) => {
+      const date = r.reportDate ?? r.report_date;
+      para(`${fmtDate(date)} — ${r.shift} shift`, { bold: true, size: 10, color: [110, 120, 140] });
+      para(r.followUp ?? r.follow_up);
+    });
 
-  // E-sign block
+  // Authorized e-sign block
   if (opts.signOff) {
-    section("Authorized Sign-off");
-    line(`Signed by: ${opts.signOff.name}`);
-    line(`Role: ${opts.signOff.role}`);
-    line(`Signed at: ${opts.signOff.signedAt}`);
-    if (opts.signOff.imageUrl && opts.signOff.imageUrl.startsWith("data:")) {
+    heading("AUTHORIZED SIGN-OFF");
+    para(`Signed by: ${opts.signOff.name}`, { bold: true });
+    para(`Role: ${opts.signOff.role}`);
+    para(`Signed at: ${opts.signOff.signedAt}`);
+    if (opts.signOff.imageUrl) {
       try {
         ensure(70);
         doc.addImage(opts.signOff.imageUrl, "PNG", margin, y, 180, 55);
         y += 65;
       } catch {
-        line("(signature image)");
+        para("(signature image)", { indent: 12, color: [110, 120, 140] });
       }
     }
   }
 
   const safeRange = opts.rangeLabel.replace(/\s+/g, "-").toLowerCase();
-  doc.save(`hub-overview-${safeRange}.pdf`);
+  doc.save(`Hub-Overview-${safeRange}-${new Date().toISOString().slice(0, 10)}.pdf`);
 }
