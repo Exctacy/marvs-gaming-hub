@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   getSessionFromRequest,
-  resolveBranchId,
   canDeleteAnyReport,
 } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -46,8 +45,9 @@ export async function PUT(
   const existing = await prisma.gamingReport.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // Branch lock check
-  if (user.branchId && existing.branchId !== user.branchId && !["super_admin", "management"].includes(user.role)) {
+  const canAccessAllBranches = ["super_admin", "management"].includes(user.role);
+  const isSameBranch = user.branchId === existing.branchId;
+  if (!isSameBranch && !canAccessAllBranches) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -57,11 +57,13 @@ export async function PUT(
       return NextResponse.json({ error: "Only admins can edit submitted reports" }, { status: 403 });
     }
   } else {
-    // For drafts, owner or branch admin can edit
+    // Drafts can be edited by their creator, a branch admin, or selected staff.
     const isOwner = existing.createdById === user.id;
     const isBranchAdmin = canDeleteAnyReport(user.role);
-    const isSameBranch = user.branchId === existing.branchId;
-    if (!isOwner && !(isBranchAdmin && isSameBranch)) {
+    const isSelectedStaff = user.branchId === existing.branchId &&
+      ["admin", "computer_tech"].includes(user.role) &&
+      [existing.adminName, existing.techName].includes(user.fullName);
+    if (!isOwner && !isBranchAdmin && !isSelectedStaff) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
   }

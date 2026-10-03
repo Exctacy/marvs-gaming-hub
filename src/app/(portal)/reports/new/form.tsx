@@ -144,7 +144,7 @@ export default function NewGamingReportForm() {
             if (shift === "Opening") carryDate.setUTCDate(carryDate.getUTCDate() - 1);
             const date = carryDate.toISOString().slice(0, 10);
             const ld = await fetch(
-              `/api/reports?branchId=${branchId}&date=${date}&shift=${previousShift}&limit=1`
+              `/api/reports?branchId=${branchId}&date=${date}&shift=${previousShift}&limit=1&includeData=1`
             ).then((r) => r.json());
             const all = ld.reports || [];
             if (all.length) {
