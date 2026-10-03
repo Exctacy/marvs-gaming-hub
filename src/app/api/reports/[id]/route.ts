@@ -11,23 +11,20 @@ import { safeJsonParse } from "@/lib/json";
 
 async function canAccessReportBranch(
   user: SessionUser,
-  report: { branchId: string; adminName: string | null; techName: string | null }
+  branchId: string
 ) {
   if (["super_admin", "management"].includes(user.role)) return true;
-  if (user.branchId === report.branchId) return true;
-  if (!["admin", "computer_tech"].includes(user.role)) return false;
 
   const staff = await prisma.staffProfile.findUnique({
     where: { id: user.id },
-    select: { branchId: true, fullName: true, role: true, status: true },
+    select: { branchId: true, role: true, status: true },
   });
 
   return Boolean(
     staff &&
       staff.status === "active" &&
-      staff.branchId === report.branchId &&
-      staff.role === user.role &&
-      [report.adminName, report.techName].includes(staff.fullName)
+      staff.branchId === branchId &&
+      staff.role === user.role
   );
 }
 
@@ -49,7 +46,7 @@ export async function GET(
   const report = await prisma.gamingReport.findUnique({ where: { id } });
   if (!report) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  if (!(await canAccessReportBranch(user, report))) {
+  if (!(await canAccessReportBranch(user, report.branchId))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -67,7 +64,7 @@ export async function PUT(
   const existing = await prisma.gamingReport.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const canAccessBranch = await canAccessReportBranch(user, existing);
+  const canAccessBranch = await canAccessReportBranch(user, existing.branchId);
   if (!canAccessBranch) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -81,11 +78,14 @@ export async function PUT(
     // Drafts can be edited by their creator, a branch admin, or selected staff.
     const isOwner = existing.createdById === user.id;
     const isBranchAdmin = canDeleteAnyReport(user.role);
-    const isSelectedStaff = canAccessBranch &&
+    const isSelectedTech = canAccessBranch &&
       ["admin", "computer_tech"].includes(user.role) &&
       [existing.adminName, existing.techName].includes(user.fullName);
-    if (!isOwner && !isBranchAdmin && !isSelectedStaff) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!isOwner && !isBranchAdmin && !isSelectedTech) {
+      return NextResponse.json(
+        { error: "Only the report creator, selected report staff, or a branch admin can edit this draft." },
+        { status: 403 }
+      );
     }
   }
 

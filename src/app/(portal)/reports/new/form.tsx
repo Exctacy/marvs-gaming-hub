@@ -137,15 +137,18 @@ export default function NewGamingReportForm() {
             tSig && typeof tSig === "object" ? tSig.image_url || null : typeof tSig === "string" ? tSig : null
           );
         } else {
-          // Carry-forward from the preceding shift when available.
+          // Carry-forward from the same shift on the previous day when available.
           try {
-            const previousShift = shift === "Opening" ? "Night" : shift === "Mid" ? "Opening" : "Mid";
             const carryDate = new Date(`${reportDate}T00:00:00.000Z`);
-            if (shift === "Opening") carryDate.setUTCDate(carryDate.getUTCDate() - 1);
+            carryDate.setUTCDate(carryDate.getUTCDate() - 1);
             const date = carryDate.toISOString().slice(0, 10);
-            const ld = await fetch(
-              `/api/reports?branchId=${branchId}&date=${date}&shift=${previousShift}&limit=1&includeData=1`
-            ).then((r) => r.json());
+            const carryRes = await fetch(
+              `/api/reports?branchId=${branchId}&date=${date}&shift=${shift}&limit=1&includeData=1`
+            );
+            const ld = await carryRes.json();
+            if (!carryRes.ok) {
+              throw new Error(ld.error || "Could not load the previous shift report.");
+            }
             const all = ld.reports || [];
             if (all.length) {
               const latest = all[0];
@@ -181,11 +184,13 @@ export default function NewGamingReportForm() {
                 });
               }
               setCarryNote(
-                `Pre-filled from the previous ${previousShift} shift (${String(latest.reportDate).slice(0, 10)}). Update only what changed; these fields may be left blank.`
+                `Pre-filled from the previous day's ${shift} shift (${String(latest.reportDate).slice(0, 10)}). Update only what changed; these fields may be left blank.`
               );
             }
-          } catch {
-            /* ignore carry-forward errors */
+          } catch (e: any) {
+            toast.error("Could not carry forward the previous shift", {
+              description: e.message || "Please check your connection and try again.",
+            });
           }
         }
       } catch (e: any) {
