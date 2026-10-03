@@ -46,14 +46,24 @@ export async function PUT(
   const existing = await prisma.gamingReport.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  if (existing.status !== "draft") {
-    return NextResponse.json({ error: "Submitted reports cannot be edited" }, { status: 400 });
+  // Branch lock check
+  if (user.branchId && existing.branchId !== user.branchId && !["super_admin", "management"].includes(user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // Owner or admin can edit drafts
-  const isOwner = existing.createdById === user.id;
-  if (!isOwner && !canDeleteAnyReport(user.role)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  // For submitted reports, only admins can edit
+  if (existing.status === "submitted") {
+    if (!canDeleteAnyReport(user.role)) {
+      return NextResponse.json({ error: "Only admins can edit submitted reports" }, { status: 403 });
+    }
+  } else {
+    // For drafts, owner or branch admin can edit
+    const isOwner = existing.createdById === user.id;
+    const isBranchAdmin = canDeleteAnyReport(user.role);
+    const isSameBranch = user.branchId === existing.branchId;
+    if (!isOwner && !(isBranchAdmin && isSameBranch)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
   }
 
   const parsed = reportUpdateSchema.safeParse(await req.json());

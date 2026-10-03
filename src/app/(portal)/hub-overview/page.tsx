@@ -114,6 +114,7 @@ export default function StaffHubOverviewPage() {
     const pcReports: Record<string, Set<string>> = {};
     const pcTypes: Record<string, Set<string>> = {};
     const pcBrands: Record<string, Set<string>> = {};
+    const pcNotes: Record<string, Set<string>> = {};
     ranged.forEach((r) => {
       DEFECT_TYPES.forEach(({ storeKey, label }) => {
         (r.reportData?.[storeKey] || []).forEach((x: any) => {
@@ -125,6 +126,10 @@ export default function StaffHubOverviewPage() {
           pcBrands[x.pc] = pcBrands[x.pc] || new Set();
           const brand = (x.brand || "").trim();
           pcBrands[x.pc].add(brand ? `${label}: ${brand}` : label);
+          if (x.note) {
+            pcNotes[x.pc] = pcNotes[x.pc] || new Set();
+            pcNotes[x.pc].add(x.note);
+          }
         });
       });
     });
@@ -134,6 +139,7 @@ export default function StaffHubOverviewPage() {
         count: set.size,
         types: [...(pcTypes[pc] || [])],
         brands: [...(pcBrands[pc] || [])],
+        issues: [...(pcNotes[pc] || [])],
       }))
       .sort((a, b) => b.count - a.count);
     const recurringCount = defective.filter((x) => x.count >= 2).length;
@@ -410,8 +416,22 @@ export default function StaffHubOverviewPage() {
                 >
                   {x.brands.join(" · ")}
                 </p>
+                {x.issues.length > 0 && (
+                  <div className={`text-[11px] mt-2 space-y-1`}>
+                    {x.issues.map((issue: string, i: number) => (
+                      <p
+                        key={i}
+                        className={`${
+                          x.count >= 2 ? "text-red-600" : "text-amber-700"
+                        } italic`}
+                      >
+                        • {issue}
+                      </p>
+                    ))}
+                  </div>
+                )}
                 <p
-                  className={`text-[11px] mt-0.5 ${
+                  className={`text-[11px] mt-2 ${
                     x.count >= 2 ? "text-red-400" : "text-amber-500"
                   }`}
                 >

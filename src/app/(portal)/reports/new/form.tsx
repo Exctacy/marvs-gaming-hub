@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import ReportSection from "@/components/reports/ReportSection";
 import PcChecklist from "@/components/reports/PcChecklist";
+import StaffSelect from "@/components/reports/StaffSelect";
 import SignaturePad, { SignaturePadHandle } from "@/components/reports/SignaturePad";
 import {
   mergeConfig,
@@ -74,6 +75,7 @@ export default function NewGamingReportForm() {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [carryNote, setCarryNote] = useState("");
+  const [editingSubmittedReport, setEditingSubmittedReport] = useState(false);
 
   useEffect(() => {
     if (!branchId) return;
@@ -101,11 +103,7 @@ export default function NewGamingReportForm() {
             setLoading(false);
             return;
           }
-          if (r.status !== "draft") {
-            toast.error("This report is already submitted and cannot be edited.");
-            setLoading(false);
-            return;
-          }
+          setEditingSubmittedReport(r.status === "submitted");
           setReportDate((r.reportDate || todayISO()).toString().slice(0, 10));
           setShift(r.shift || "Opening");
           setAdminName(r.adminName || (isTech ? "" : user?.fullName || ""));
@@ -436,20 +434,20 @@ export default function NewGamingReportForm() {
         <div className="grid sm:grid-cols-3 gap-4 mt-4">
           <div>
             <label className="text-sm font-medium">Admin Name</label>
-            <Input
+            <StaffSelect
+              branchId={branchId || ""}
               value={adminName}
-              onChange={(e) => setAdminName(e.target.value)}
-              className="mt-1"
-              placeholder="Admin on duty"
+              onChange={setAdminName}
+              placeholder="Select admin on duty"
             />
           </div>
           <div>
             <label className="text-sm font-medium">Technician Name</label>
-            <Input
+            <StaffSelect
+              branchId={branchId || ""}
               value={techName}
-              onChange={(e) => setTechName(e.target.value)}
-              className="mt-1"
-              placeholder="Tech on duty"
+              onChange={setTechName}
+              placeholder="Select tech on duty"
             />
           </div>
           <div>

@@ -7,7 +7,7 @@ const fmtDate = (d: any) =>
 export async function downloadHubOverviewPdf(opts: {
   rangeLabel: string;
   reportsCount: number;
-  recurring: Array<{ pc: string; count: number; types: string[]; brands: string[] }>;
+  recurring: Array<{ pc: string; count: number; types: string[]; brands: string[]; issues?: string[] }>;
   followUps: any[];
   overallCounts: Record<string, Record<string, number>>;
   latestNoDefect: string[];
@@ -103,11 +103,16 @@ export async function downloadHubOverviewPdf(opts: {
   heading("DEFECTIVE PCs");
   if (!opts.recurring.length) para("None.");
   else
-    opts.recurring.forEach((x) =>
+    opts.recurring.forEach((x) => {
       para(
         `PC ${x.pc} — in ${x.count} report(s)${x.count >= 2 ? " [Recurring]" : ""} — ${x.brands.join(", ")}`
-      )
-    );
+      );
+      if (x.issues && x.issues.length > 0) {
+        x.issues.forEach((issue: string) => {
+          para(`• ${issue}`, { indent: 12, size: 10, color: [80, 90, 110] });
+        });
+      }
+    });
 
   heading("LATEST PC NO-DEFECT STATE");
   if (!opts.latestMeta) para("None.");

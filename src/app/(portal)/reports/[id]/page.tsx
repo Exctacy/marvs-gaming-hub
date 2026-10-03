@@ -142,6 +142,13 @@ export default function ReportDetailPage() {
             </Link>
           </Button>
         )}
+        {!isDraft && canManage && (
+          <Button asChild className="bg-blue-700 hover:bg-blue-800">
+            <Link href={`/reports/new?edit=${report.id}`}>
+              <Pencil className="w-4 h-4 mr-2" /> Edit Report
+            </Link>
+          </Button>
+        )}
         {(canManage || (isDraft && canDeleteDraft)) && (
           <Button
             variant="outline"
