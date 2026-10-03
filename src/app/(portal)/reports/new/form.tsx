@@ -443,16 +443,16 @@ export default function NewGamingReportForm() {
               branchId={branchId || ""}
               value={adminName}
               onChange={setAdminName}
-              placeholder="Select admin on duty"
+              placeholder="Select staff on duty"
             />
           </div>
           <div>
-            <label className="text-sm font-medium">Technician Name</label>
+            <label className="text-sm font-medium">Technician / Second Admin</label>
             <StaffSelect
               branchId={branchId || ""}
               value={techName}
               onChange={setTechName}
-              placeholder="Select tech on duty"
+              placeholder="Select tech or second admin"
             />
           </div>
           <div>

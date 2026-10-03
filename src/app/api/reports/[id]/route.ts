@@ -78,9 +78,12 @@ export async function PUT(
     // Drafts can be edited by their creator, a branch admin, or selected staff.
     const isOwner = existing.createdById === user.id;
     const isBranchAdmin = canDeleteAnyReport(user.role);
+    const selectedNames = [existing.adminName, existing.techName]
+      .filter((name): name is string => Boolean(name))
+      .map((name) => name.trim().toLocaleLowerCase());
     const isSelectedTech = canAccessBranch &&
       ["admin", "computer_tech"].includes(user.role) &&
-      [existing.adminName, existing.techName].includes(user.fullName);
+      selectedNames.includes(user.fullName.trim().toLocaleLowerCase());
     if (!isOwner && !isBranchAdmin && !isSelectedTech) {
       return NextResponse.json(
         { error: "Only the report creator, selected report staff, or a branch admin can edit this draft." },

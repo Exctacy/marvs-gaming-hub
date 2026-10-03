@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionFromRequest } from "@/lib/auth";
+import { getSessionFromRequest, canSwitchBranch } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
@@ -11,8 +11,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "branchId required" }, { status: 400 });
   }
 
-  // Branch lock: user can only view staff from their own branch (except super_admin/management)
-  if (user.branchId && branchId !== user.branchId && !["super_admin", "management"].includes(user.role)) {
+  // Only global managers may request staff from another branch.
+  if (!canSwitchBranch(user.role) && (!user.branchId || branchId !== user.branchId)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -20,9 +20,6 @@ export async function GET(req: NextRequest) {
     where: {
       branchId,
       status: "active",
-      role: {
-        in: ["admin", "computer_tech", "team_leader", "management"],
-      },
     },
     select: {
       id: true,

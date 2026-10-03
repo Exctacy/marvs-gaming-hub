@@ -24,23 +24,38 @@ export default function StaffSelect({
 }: StaffSelectProps) {
   const [staff, setStaff] = useState<StaffOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!branchId) {
       setStaff([]);
+      setError("");
       setLoading(false);
       return;
     }
 
     setLoading(true);
-    fetch(`/api/staff/by-branch?branchId=${branchId}`)
-      .then((r) => r.json())
-      .then((d) => {
+    setError("");
+    fetch(`/api/staff/by-branch?branchId=${encodeURIComponent(branchId)}`)
+      .then(async (r) => {
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || "Could not load branch staff.");
         setStaff(d.staff || []);
       })
-      .catch(() => setStaff([]))
+      .catch((e: unknown) => {
+        setStaff([]);
+        setError(e instanceof Error ? e.message : "Could not load branch staff.");
+      })
       .finally(() => setLoading(false));
   }, [branchId]);
+
+  if (error) {
+    return (
+      <p role="alert" className="mt-1 text-sm text-red-600">
+        {error}
+      </p>
+    );
+  }
 
   if (loading) {
     return (
