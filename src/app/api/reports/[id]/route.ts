@@ -2,11 +2,34 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   getSessionFromRequest,
   canDeleteAnyReport,
+  type SessionUser,
 } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
 import { reportUpdateSchema } from "@/lib/api-schemas";
 import { safeJsonParse } from "@/lib/json";
+
+async function canAccessReportBranch(
+  user: SessionUser,
+  report: { branchId: string; adminName: string | null; techName: string | null }
+) {
+  if (["super_admin", "management"].includes(user.role)) return true;
+  if (user.branchId === report.branchId) return true;
+  if (!["admin", "computer_tech"].includes(user.role)) return false;
+
+  const staff = await prisma.staffProfile.findUnique({
+    where: { id: user.id },
+    select: { branchId: true, fullName: true, role: true, status: true },
+  });
+
+  return Boolean(
+    staff &&
+      staff.status === "active" &&
+      staff.branchId === report.branchId &&
+      staff.role === user.role &&
+      [report.adminName, report.techName].includes(staff.fullName)
+  );
+}
 
 function parseReport(r: any) {
   return {
@@ -26,8 +49,7 @@ export async function GET(
   const report = await prisma.gamingReport.findUnique({ where: { id } });
   if (!report) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // Branch lock
-  if (user.branchId && report.branchId !== user.branchId && !["super_admin", "management"].includes(user.role)) {
+  if (!(await canAccessReportBranch(user, report))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -45,9 +67,8 @@ export async function PUT(
   const existing = await prisma.gamingReport.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const canAccessAllBranches = ["super_admin", "management"].includes(user.role);
-  const isSameBranch = user.branchId === existing.branchId;
-  if (!isSameBranch && !canAccessAllBranches) {
+  const canAccessBranch = await canAccessReportBranch(user, existing);
+  if (!canAccessBranch) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -60,7 +81,7 @@ export async function PUT(
     // Drafts can be edited by their creator, a branch admin, or selected staff.
     const isOwner = existing.createdById === user.id;
     const isBranchAdmin = canDeleteAnyReport(user.role);
-    const isSelectedStaff = user.branchId === existing.branchId &&
+    const isSelectedStaff = canAccessBranch &&
       ["admin", "computer_tech"].includes(user.role) &&
       [existing.adminName, existing.techName].includes(user.fullName);
     if (!isOwner && !isBranchAdmin && !isSelectedStaff) {
