@@ -40,6 +40,19 @@ export default function GuidePage() {
 
       <Card>
         <CardHeader>
+          <CardTitle className="text-base">IR &amp; Memos</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          <p>Open <strong>Operations / IR &amp; Memos</strong>. Team Leaders and managers can prepare an Incident Report or equipment acknowledgment memo for a staff member in their branch.</p>
+          <p>Save the draft, review it, and add your own signature to send it for approval. An independent manager reviews and signs before the document is issued. Returned documents must be saved as a new content version before resubmission.</p>
+          <p>Staff use <strong>My documents</strong> to read the full approved document and sign using their own account. An IR signature confirms receipt; a memo signature confirms its displayed acknowledgment statement. Staff may add a response or decline acknowledgment with a reason.</p>
+          <p>Issued documents are locked. Use <strong>Create correction</strong> for a linked revision with fresh signatures. Download PDF preserves the selected version, signature statements, timestamps in Manila time, and document history.</p>
+          <p>Notifications appear beside IR &amp; Memos in the sidebar and inside the document inbox. Documents are private to the preparer, authorized managers, and the named recipient after issuance.</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle className="text-base">Roles at a Glance</CardTitle>
         </CardHeader>
         <CardContent className="text-sm space-y-2">

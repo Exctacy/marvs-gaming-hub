@@ -114,6 +114,38 @@ prisma/
 5. Consider Redis/session store for horizontal scaling (current: DB-backed sessions).
 6. Back up your Postgres database and enable monitoring.
 
+## IR & Memos
+
+The `/documents` module supports individual Incident Reports and equipment
+acknowledgment memos based on the supplied paper templates. It recreates their
+fields and sections in web forms and a paginated PDF; it does not overlay the
+original PDF artwork.
+
+- Team Leaders prepare documents for their branch and track their own documents.
+- Branch admins review their branch; Management and Super Admin can review across branches.
+- Preparer and subject staff cannot approve their own document.
+- Staff see only their issued documents under My documents, regardless of later branch transfer.
+- Preparation, approval, and staff signatures are bound to the stored content version and SHA-256 fingerprint.
+- Submitted/issued content is locked; returned drafts need a saved new version, and issued corrections create linked revisions with fresh signatures.
+- Staff may acknowledge with an optional response or decline with a required reason. No disciplinary action is applied automatically.
+- Document history, audit entries, notices, and state transitions commit in one transaction. Optimistic locking rejects stale actions.
+- Notices are private, in-app only. The sidebar refreshes its unread badge every minute; there is no email or SMS delivery.
+
+Database setup for an existing installation is documented in
+[`prisma/updates/README.md`](prisma/updates/README.md). Run `npm run test:documents`
+for policy and API workflow tests. API tests use an in-memory transaction double;
+they do not replace validation against a running PostgreSQL instance.
+
+### Manual verification
+
+1. Log in as a TL, select an IR or Memo, choose an active staff member, and save a draft.
+2. Review and sign as preparer; verify the staff account cannot access the pending draft.
+3. As an independent branch manager, return with a reason or approve and sign.
+4. As the recipient, open My documents, review the issued version, and sign or decline with a reason.
+5. Verify other staff/branch admins cannot access the document or its PDF.
+6. Download the completed PDF and check long content, all signatures, statements, and history.
+7. Create a correction; verify original signatures remain on the original and the new draft has none.
+
 ## License
 
 Proprietary — MARVS Gaming Hub internal use.

@@ -21,6 +21,7 @@ model Branch {
   gamingConfig  GamingHubConfig?
   auditLogs     AuditLog[]
   notifications Notification[]
+  staffDocuments StaffDocument[]
 }
 
 model StaffProfile {
@@ -43,6 +44,9 @@ model StaffProfile {
 
   branch   Branch?       @relation(fields: [branchId], references: [id])
   sessions StaffSession[]
+  preparedDocuments StaffDocument[] @relation("DocumentAuthor")
+  receivedDocuments StaffDocument[] @relation("DocumentRecipient")
+  documentNotices DocumentNotice[]
 
   @@index([branchId, status])
 }
@@ -134,4 +138,82 @@ model SystemSettings {
   logoUrl      String?
   systemName   String @default("Gaming Hub Management System")
   updatedAt    DateTime @updatedAt
+}
+
+// Issued content is immutable. A correction is a separate linked revision.
+model StaffDocument {
+  id             String @id @default(cuid())
+  kind           String
+  title          String
+  branchId       String
+  branchName     String
+  recipientId    String
+  recipientName  String
+  createdById    String
+  preparedByName String
+  status         String @default("draft")
+  content        Json
+  contentVersion Int @default(1)
+  lockVersion    Int @default(1)
+  contentHash    String?
+  revision       Int @default(1)
+  supersedesId   String? @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  branch         Branch @relation(fields: [branchId], references: [id])
+  recipient      StaffProfile @relation("DocumentRecipient", fields: [recipientId], references: [id])
+  author         StaffProfile @relation("DocumentAuthor", fields: [createdById], references: [id])
+  supersedes     StaffDocument? @relation("DocumentRevision", fields: [supersedesId], references: [id])
+  revisedBy      StaffDocument? @relation("DocumentRevision")
+  signatures     DocumentSignature[]
+  events         DocumentEvent[]
+  notices        DocumentNotice[]
+
+  @@index([branchId, status, createdAt])
+  @@index([recipientId, status])
+  @@index([createdById, createdAt])
+}
+
+model DocumentSignature {
+  id             String @id @default(cuid())
+  documentId     String
+  contentVersion Int
+  contentHash    String
+  purpose        String // prepared | approved | acknowledged
+  signerId       String
+  signerName     String
+  signerRole     String
+  image          String
+  statement      String
+  signedAt       DateTime @default(now())
+  document       StaffDocument @relation(fields: [documentId], references: [id])
+
+  @@unique([documentId, contentVersion, purpose])
+}
+
+model DocumentEvent {
+  id         String @id @default(cuid())
+  documentId String
+  actorId    String
+  actorName  String
+  action     String
+  note       String?
+  version    Int
+  createdAt  DateTime @default(now())
+  document   StaffDocument @relation(fields: [documentId], references: [id])
+
+  @@index([documentId, createdAt])
+}
+
+model DocumentNotice {
+  id         String @id @default(cuid())
+  documentId String
+  staffId    String
+  message    String
+  readAt     DateTime?
+  createdAt  DateTime @default(now())
+  document   StaffDocument @relation(fields: [documentId], references: [id])
+  staff      StaffProfile @relation(fields: [staffId], references: [id])
+
+  @@index([staffId, readAt, createdAt])
 }

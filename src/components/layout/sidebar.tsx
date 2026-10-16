@@ -22,6 +22,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { DocumentNoticeBadge } from "@/components/documents/document-notice-badge";
 
 interface NavItem {
   label: string;
@@ -47,6 +48,7 @@ const sections: NavSection[] = [
     items: [
       { label: "Shift Reports", href: "/reports", icon: FileText },
       { label: "New Report", href: "/reports/new", icon: FileText },
+      { label: "IR & Memos", href: "/documents", icon: ScrollText },
     ],
   },
   {
@@ -144,6 +146,7 @@ export function Sidebar({ user }: SidebarProps) {
                       >
                         <item.icon className="h-4 w-4 shrink-0" />
                         {item.label}
+                        {item.href === "/documents" && <DocumentNoticeBadge />}
                       </Link>
                     );
                   })}

@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test:documents": "tsx --test tests/staff-documents.test.ts tests/staff-document-api.test.ts",
+    "db:documents": "prisma db execute --schema prisma/schema.prisma --file prisma/updates/20261016_staff_documents.sql",
     "postinstall": "prisma generate",
     "vercel-build": "prisma generate && prisma db push && prisma db seed && next build",
     "db:generate": "prisma generate",
