@@ -36,7 +36,7 @@ test("issued and submitted documents cannot be edited, even by an admin author",
   assert.equal(canEditDocument(actor("other-admin", "admin"), doc), false);
 });
 test("templates validate nested data, dates, and payload bounds", () => {
-  const input = { kind: "IR", title: "Incident", branchId: "a", recipientId: "staff-a", content: defaultDocumentContent("IR") };
+  const input = { kind: "IR", title: "Incident", branchId: "a", participantIds: ["staff-a"], content: defaultDocumentContent("IR") };
   assert.equal(documentInputSchema.safeParse(input).success, true);
   assert.equal(documentInputSchema.safeParse({ ...input, content: { ...input.content, incidentDate: "2026-02-30" } }).success, false);
   assert.equal(documentInputSchema.safeParse({ ...input, content: { ...input.content, reportTime: "25:00" } }).success, false);
@@ -52,4 +52,15 @@ test("submission needs incident details and receipt language stays distinct", ()
 });
 test("Manila dates remain correct around UTC midnight", () => {
   assert.deepEqual(manilaDateTime(new Date("2026-10-15T17:30:00Z")), { date: "2026-10-16", time: "01:30" });
+});
+
+test("all participants have issued access, and participants cannot approve", () => {
+  const group = { ...doc, status: "awaiting_acknowledgment", participants: [{ staffId: "staff-a" }, { staffId: "staff-b" }] };
+  assert.equal(canReadDocument(actor("staff-b", "computer_tech", "b"), group), true);
+  assert.equal(canReadDocument(actor("outsider", "computer_tech"), group), false);
+  assert.equal(canReviewDocument(actor("staff-b", "admin"), { ...group, status: "pending_review" }), false);
+  const input = { kind: "MEMO", title: "Memo", branchId: "a", content: defaultDocumentContent("MEMO") };
+  assert.equal(documentInputSchema.safeParse({ ...input, participantIds: [] }).success, false);
+  assert.equal(documentInputSchema.safeParse({ ...input, participantIds: ["a", "a"] }).success, false);
+  assert.equal(documentInputSchema.safeParse({ ...input, participantIds: ["a", "b"] }).success, true);
 });

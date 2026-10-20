@@ -1,61 +1,107 @@
-import { jsPDF } from "jspdf";
-import { CONTENT_FIELDS, DOCUMENT_STATUSES, IR_RECEIPT_STATEMENT, type StaffDocumentView } from "./staff-documents";
+﻿import { jsPDF } from "jspdf";
+import { CONTENT_FIELDS, DOCUMENT_STATUSES, managementInitiated, receiptStatement, type StaffDocumentView } from "./staff-documents";
 
-// Generated from the stored version, never from unsaved browser form values.
-export function buildStaffDocumentPdf(document: StaffDocumentView): Uint8Array {
+/** Formal printable form. System activity stays in the portal rather than bloating the paper copy. */
+export function buildStaffDocumentPdf(doc: StaffDocumentView): Uint8Array {
   const pdf = new jsPDF({ unit: "pt", format: "a4", compress: true });
-  const margin = 46, pageWidth = pdf.internal.pageSize.getWidth(), pageHeight = pdf.internal.pageSize.getHeight();
-  const width = pageWidth - margin * 2;
+  const pageWidth = pdf.internal.pageSize.getWidth(), pageHeight = pdf.internal.pageSize.getHeight();
+  const margin = 42, width = pageWidth - margin * 2, bottom = pageHeight - 45;
   let y = margin;
-  const ascii = (text: string) => text.replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"').replace(/[\u2013\u2014]/g, "-").replace(/\u2022/g, "-").replace(/\u2026/g, "...");
-  const ensure = (height: number) => { if (y + height > pageHeight - 48) { pdf.addPage(); y = margin; } };
-  const text = (value: string, size = 10, bold = false) => {
-    pdf.setFont("helvetica", bold ? "bold" : "normal"); pdf.setFontSize(size); pdf.setTextColor(30, 41, 59);
-    const lines = pdf.splitTextToSize(ascii(value || "Not specified"), width) as string[];
-    for (const line of lines) { ensure(size + 5); pdf.text(line, margin, y + size); y += size + 5; }
-    y += 5;
+  let continuingParticipant = "";
+  const clean = (s: string) => s.replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"').replace(/[\u2013\u2014]/g, "-").replace(/\u2022/g, "-").replace(/\u2026/g, "...");
+  const font = (size: number, bold = false) => { pdf.setFont("helvetica", bold ? "bold" : "normal"); pdf.setFontSize(size); pdf.setTextColor(25, 35, 50); };
+  const header = (continued = false) => {
+    font(11, true); pdf.text("MARVS GAMING HUB", pageWidth / 2, y + 11, { align: "center" }); y += 22;
+    font(17, true); pdf.text(`${doc.kind === "IR" ? "INCIDENT REPORT" : "MEMORANDUM"}${continued ? " (continued)" : ""}`, pageWidth / 2, y + 17, { align: "center" }); y += 28;
+    pdf.setDrawColor(25, 55, 100); pdf.setLineWidth(1); pdf.line(margin, y, pageWidth - margin, y); y += 14;
   };
-  const section = (title: string, body: string) => { ensure(50); text(title, 11, true); text(body); y += 7; };
-  const timestamp = (value: string) => new Date(value).toLocaleString("en-PH", { timeZone: "Asia/Manila", dateStyle: "medium", timeStyle: "short" }) + " PHT";
-  text("MARVS GAMING HUB", 11, true);
-  text(document.kind === "IR" ? "INCIDENT REPORT FORM" : "MEMORANDUM", 19, true);
-  text(document.title, 12, true);
-  text(`${DOCUMENT_STATUSES[document.status]} | Revision ${document.revision} | Content version ${document.contentVersion}`, 9);
-  if (["draft", "returned", "pending_review"].includes(document.status)) text("NOT YET ISSUED - FOR PREPARATION / MANAGEMENT REVIEW", 9, true);
-  text(`Reference: ${document.id}`, 8);
-  text(`Branch: ${document.branchName}`);
-  text(`To / subject staff member: ${document.recipientName}`);
-  text(`Reported / prepared by: ${document.preparedByName}`);
-  y += 6;
-  const content = document.content as unknown as Record<string, string>;
-  for (const [key, label] of CONTENT_FIELDS[document.kind]) section(label, content[key]);
-  if (document.kind === "IR") section("Staff receipt acknowledgment", IR_RECEIPT_STATEMENT);
-  if (document.kind === "MEMO") section("Confirmation", "By signing below, I confirm the acknowledgment statement in this memorandum.");
-  ensure(45); text("SIGNATURES", 13, true);
-  for (const [purpose, label] of [["prepared", "Prepared by"], ["approved", "Approved by"], ["acknowledged", "Acknowledged by"]]) {
-    const sig = document.signatures.find((s) => s.purpose === purpose && s.contentVersion === document.contentVersion);
-    ensure(160); text(label, 11, true);
-    if (sig) {
-      pdf.addImage(sig.image, "PNG", margin, y, 200, 70); y += 78;
-      text(`${sig.signerName} (${sig.signerRole.replaceAll("_", " ")})`, 10, true);
-      text(`Signed: ${timestamp(sig.signedAt)}`, 9);
-      text(sig.statement, 9);
-    } else text(document.status === "declined" && purpose === "acknowledged" ? "Acknowledgment declined; no staff signature recorded." : "Not yet signed.", 9);
-    y += 12;
+  const ensure = (height: number) => { if (y + height > bottom) { pdf.addPage(); y = margin; header(true); if (continuingParticipant) { font(8, true); pdf.text(clean(`${continuingParticipant} - explanation / response continued`), margin, y + 8); y += 20; } } };
+  const linesFor = (s: string, size = 9.5, w = width, bold = false): string[] => { font(size, bold); return pdf.splitTextToSize(clean(s || "Not specified"), w) as string[]; };
+  const text = (s: string, size = 9.5, bold = false) => {
+    for (const line of linesFor(s, size, width, bold)) { ensure(size + 4); font(size, bold); pdf.text(line, margin, y + size); y += size + 4; }
+  };
+  const section = (title: string, value: string) => { ensure(40); y += 5; text(title.toUpperCase(), 8.5, true); y += 2; text(value); y += 5; };
+  const timestamp = (date: string) => new Date(date).toLocaleString("en-PH", { timeZone: "Asia/Manila", dateStyle: "medium", timeStyle: "short" }) + " PHT";
+  const current = doc.signatures.filter((s) => s.contentVersion === doc.contentVersion);
+  const findSignature = (purpose: string, staffId?: string) => current.find((s) => s.purpose === purpose && (!staffId || s.signerId === staffId));
+  header();
+  text(doc.title, 11, true); y += 5;
+  text(`Branch: ${doc.branchName}   |   Revision: ${doc.revision}`, 9);
+  text(`Status: ${DOCUMENT_STATUSES[doc.status]}`, 8.5);
+  if (["draft", "returned", "pending_review"].includes(doc.status)) text("DRAFT / NOT YET ISSUED", 8, true);
+  text(`To / staff involved: ${doc.participants.map((p) => p.staffName).join(", ")}`, 9);
+  text(`Initiated by: ${doc.preparedByName}`, 9); y += 6;
+  const content = doc.content as unknown as Record<string, string>;
+  // Compact the basic date/time information into pairs; long narrative sections wrap naturally.
+  const fields = CONTENT_FIELDS[doc.kind];
+  const basic = fields.filter(([, , type]) => type !== "textarea");
+  for (let i = 0; i < basic.length; i += 2) {
+    const row = basic.slice(i, i + 2), colWidth = (width - 18) / 2;
+    const columns = row.map(([key, label]) => linesFor(`${label}: ${content[key] || "Not specified"}`, 9, colWidth));
+    const height = Math.max(...columns.map((c) => c.length)) * 13 + 6;
+    if (height > 120) { for (const [key, label] of row) section(label, content[key]); continue; }
+    ensure(height);
+    columns.forEach((lines, col) => { font(9); lines.forEach((line, lineIndex) => pdf.text(line, margin + col * (colWidth + 18), y + 9 + lineIndex * 13)); }); y += height;
   }
-  if (document.supersedesId) section("Revision reference", `Correction of document ${document.supersedesId}. Original signatures remain on the original record.`);
-  if (document.revisedBy) section("Linked correction", `Revision ${document.revisedBy.revision}: ${document.revisedBy.id}. Check the portal for its current approval status.`);
-  if (document.contentHash) section("Content fingerprint (SHA-256)", document.contentHash);
-  ensure(40); text("DOCUMENT HISTORY", 13, true);
-  for (const event of document.events) {
-    section(`${event.action.replaceAll("_", " ")} - ${event.actorName}`, `${timestamp(event.createdAt)} | Content version ${event.version}${event.note ? `\n${event.note}` : ""}`);
+  for (const [key, label, type] of fields) if (type === "textarea" && key !== "acknowledgment") section(label, content[key]);
+  if (content.howHappened) section("Previously recorded incident account (legacy)", content.howHappened);
+  section(doc.kind === "IR" ? "Staff explanations and signatures" : "Staff acknowledgments", receiptStatement(doc.kind, doc.content));
+  const compactMemo = doc.kind === "MEMO" && doc.participants.every((p) => !p.responseNote);
+  if (compactMemo) {
+    for (let i = 0; i < doc.participants.length; i += 2) {
+      const row = doc.participants.slice(i, i + 2);
+      const nameLines = row.map((p) => linesFor(p.staffName, 9, width / 2 - 15, true));
+      const nameHeight = Math.max(...nameLines.map((lines) => lines.length)) * 12;
+      const rowHeight = nameHeight + 90;
+      ensure(rowHeight);
+      row.forEach((participant, index) => {
+        const x = margin + index * (width / 2), sig = findSignature("acknowledged", participant.staffId);
+        font(9, true); nameLines[index].forEach((line, lineIndex) => pdf.text(line, x, y + 10 + lineIndex * 12));
+        font(7.5); pdf.text(participant.status === "pending" ? "Awaiting response" : participant.status, x, y + nameHeight + 12);
+        if (sig) pdf.addImage(sig.image, "PNG", x, y + nameHeight + 16, 128, 44.8);
+        else { pdf.setDrawColor(150); pdf.line(x, y + nameHeight + 58, x + 150, y + nameHeight + 58); }
+        font(7); pdf.text(sig ? timestamp(sig.signedAt) : "Signature / date pending", x, y + nameHeight + 75);
+      }); y += rowHeight;
+    }
   }
+  for (const participant of compactMemo ? [] : doc.participants) {
+    const sig = findSignature("acknowledged", participant.staffId);
+    const explanation = doc.kind === "IR" ? participant.explanation || "Awaiting the staff member's explanation." : "";
+    const measured = linesFor(explanation).length * 13.5 + (participant.responseNote ? linesFor(participant.responseNote).length * 13.5 + 20 : 0) + 100;
+    ensure(Math.min(measured, 230));
+    pdf.setDrawColor(195, 203, 214); pdf.setLineWidth(0.5); pdf.line(margin, y, pageWidth - margin, y); y += 8;
+    text(`${participant.staffName} - ${participant.status === "pending" ? "Awaiting response" : participant.status}`, 10, true);
+    continuingParticipant = participant.staffName;
+    if (doc.kind === "IR") section("Explanation / reason provided by staff", explanation);
+    if (participant.responseNote) section(participant.status === "declined" ? "Reason for declining" : "Additional response", participant.responseNote);
+    ensure(70);
+    if (sig) pdf.addImage(sig.image, "PNG", margin, y, 128, 44.8);
+    else { pdf.setDrawColor(150); pdf.line(margin, y + 40, margin + 150, y + 40); }
+    y += 49;
+    text(sig ? `Signed: ${timestamp(sig.signedAt)}` : participant.respondedAt ? `Responded: ${timestamp(participant.respondedAt)} - no signature` : "Signature / date pending", 8); y += 10;
+    continuingParticipant = "";
+  }
+  const officials = managementInitiated(doc) ? [["initiated_approved", "INITIATED AND APPROVED BY"]] : [["prepared", "INITIATED BY"], ["approved", "APPROVED BY"]];
+  const colWidth = width / officials.length;
+  const officialHeight = Math.max(...officials.map(([purpose]) => linesFor(findSignature(purpose)?.signerName || (purpose !== "approved" ? doc.preparedByName : "Pending management approval"), 9, colWidth - 12, true).length * 12 + 91));
+  ensure(officialHeight + 12); y += 12;
+  officials.forEach(([purpose, label], index) => {
+    const sig = findSignature(purpose), x = margin + colWidth * index;
+    font(8.5, true); pdf.text(label, x, y + 9);
+    if (sig) pdf.addImage(sig.image, "PNG", x, y + 15, 145, 50.75);
+    else { pdf.setDrawColor(150); pdf.line(x, y + 66, x + 170, y + 66); }
+    font(9, true);
+    const name = sig?.signerName || (purpose !== "approved" ? doc.preparedByName : "Pending management approval");
+    const names = linesFor(name, 9, colWidth - 12, true);
+    names.forEach((line, lineIndex) => pdf.text(line, x, y + 79 + lineIndex * 12));
+    font(7.5); pdf.text(sig ? timestamp(sig.signedAt) : "Not yet signed", x, y + 82 + names.length * 12);
+  });
+  y += officialHeight;
   const pages = pdf.getNumberOfPages();
   for (let page = 1; page <= pages; page++) {
-    pdf.setPage(page); pdf.setDrawColor(220, 225, 232); pdf.line(margin, pageHeight - 36, pageWidth - margin, pageHeight - 36);
-    pdf.setFontSize(8); pdf.setTextColor(100, 116, 139);
-    pdf.text("CONFIDENTIAL - Staff document", margin, pageHeight - 22);
-    pdf.text(`Revision ${document.revision} | ${page} / ${pages}`, pageWidth - margin, pageHeight - 22, { align: "right" });
+    pdf.setPage(page); pdf.setDrawColor(200); pdf.line(margin, pageHeight - 33, pageWidth - margin, pageHeight - 33);
+    font(6.5); pdf.setTextColor(100); pdf.text(`CONFIDENTIAL | ${doc.id} | Rev ${doc.revision} / v${doc.contentVersion}`, margin, pageHeight - 21);
+    pdf.text(`${page} / ${pages}`, pageWidth - margin, pageHeight - 21, { align: "right" });
   }
   return new Uint8Array(pdf.output("arraybuffer"));
 }

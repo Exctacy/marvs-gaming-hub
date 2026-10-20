@@ -51,6 +51,15 @@ export async function validateDocumentRecipient(tx: Prisma.TransactionClient, br
   if (recipient.id === authorId) throw new DocumentError(400, "You cannot issue a document to yourself.");
   return { branch, recipient };
 }
+export async function validateDocumentParticipants(tx: Prisma.TransactionClient, branchId: string, staffIds: string[], authorId: string) {
+  const branch = await tx.branch.findUnique({ where: { id: branchId } });
+  if (!branch?.active) throw new DocumentError(400, "Choose an active branch.");
+  if (!staffIds.length || staffIds.length > 50 || new Set(staffIds).size !== staffIds.length || staffIds.includes(authorId)) throw new DocumentError(400, "Select 1-50 distinct staff members other than the initiator.");
+  const staff = await tx.staffProfile.findMany({ where: { id: { in: staffIds }, branchId, status: "active" }, select: { id: true, fullName: true } });
+  if (staff.length !== staffIds.length) throw new DocumentError(400, "Every participant must be active and belong to this branch.");
+  const participants = staffIds.map((id) => { const person = staff.find((s) => s.id === id)!; return { staffId: person.id, staffName: person.fullName }; });
+  return { branch, participants };
+}
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
   if (value && typeof value === "object") return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`).join(",")}}`;
@@ -59,9 +68,23 @@ function canonical(value: unknown): string {
 export function documentHash(doc: {
   id: string; kind: string; title: string; branchId: string; branchName: string; recipientId: string;
   recipientName: string; createdById: string; preparedByName: string; contentVersion: number; content: unknown; revision: number;
+  workflowVersion?: number; initiatedByRole?: string; participants?: { staffId: string; staffName: string }[];
 }) {
   const { id, kind, title, branchId, branchName, recipientId, recipientName, createdById, preparedByName, contentVersion, content, revision } = doc;
-  return createHash("sha256").update(canonical({ id, kind, title, branchId, branchName, recipientId, recipientName, createdById, preparedByName, contentVersion, content, revision })).digest("hex");
+  const legacy = { id, kind, title, branchId, branchName, recipientId, recipientName, createdById, preparedByName, contentVersion, content, revision };
+  const value = doc.workflowVersion === 2 ? { ...legacy, workflowVersion: 2, initiatedByRole: doc.initiatedByRole, participants: (doc.participants || []).map(({ staffId, staffName }) => ({ staffId, staffName })).sort((a, b) => a.staffId.localeCompare(b.staffId)) } : legacy;
+  return createHash("sha256").update(canonical(value)).digest("hex");
+}
+export function participantResponseHash(contentHash: string, staffId: string, explanation: string, note: string) {
+  return createHash("sha256").update(canonical({ contentHash, staffId, explanation, note })).digest("hex");
+}
+export function verifyParticipantResponses(doc: { contentHash: string | null; contentVersion: number; participants: { staffId: string; explanation: string; responseNote: string }[]; signatures: { contentVersion: number; purpose: string; signerId: string; responseHash: string | null }[] }) {
+  if (!doc.contentHash) return;
+  for (const sig of doc.signatures) {
+    if (sig.contentVersion !== doc.contentVersion || sig.purpose !== "acknowledged" || !sig.responseHash) continue;
+    const participant = doc.participants.find((p) => p.staffId === sig.signerId);
+    if (!participant || sig.responseHash !== participantResponseHash(doc.contentHash, sig.signerId, participant.explanation, participant.responseNote)) throw new DocumentError(409, "A staff response failed its signature integrity check. Contact management.");
+  }
 }
 export function validateSignature(image: string | undefined) {
   if (!image) throw new DocumentError(400, "Draw your signature before continuing.");

@@ -1,36 +1,55 @@
-# Staff document database update
+﻿# Staff document database updates
 
-`20261016_staff_documents.sql` adds StaffDocument, DocumentSignature, DocumentEvent,
-and DocumentNotice, their indexes, and foreign keys. It does not alter or delete
-existing tables or data. The script applies to an existing database matching the
-previous schema and should be run once per database.
+The hosted database schema is updated separately from deployment. Vercel builds
+run `prisma generate && next build`; they do not synchronize or seed the database.
 
-With the intended PostgreSQL database configured in `.env`:
+## Existing installation with IR & Memos already enabled
 
-```sh
-npm run db:documents
-npm run db:generate
-npm run build
+Apply **only** `20261021_document_participants.sql`, once, in the hosted database's
+SQL editor. Alternatively, with `DATABASE_URL` targeting that database, run:
+
+```powershell
+npm.cmd run db:document-participants
+npm.cmd run db:generate
 ```
 
-For a new empty development database, `npm run db:push` creates the complete
-schema instead; do not also run this SQL script after `db:push`.
+Then push the code and redeploy the website. Do not rerun the October 16 script
+if its four tables already exist. Do not use `--accept-data-loss` or run demo seeds.
 
-Do not run the demo seed to enable this module. Existing accounts are reused.
-An active Team Leader (or manager), an independent manager, and the recipient
-staff account are needed to exercise the full preparation/approval/signing flow.
+The October 21 update:
 
-## Hosted deployment
+- Adds DocumentParticipant and the initiator/workflow metadata.
+- Copies each original recipient into the participant table, preserving their
+  signed/declined/pending state, response note, and response time.
+- Retains all existing document content, signature images, fingerprints, and history.
+- Expands signature uniqueness to allow one signature per staff member and version.
+- Keeps legacy fingerprint verification compatible; new documents bind the entire
+  participant list, and each signed staff response has a separate fingerprint.
 
-The Vercel build runs only `prisma generate && next build`. It does not change
-the database schema or seed demo accounts.
+## Existing database without the original IR & Memo tables
 
-Apply the SQL update once in your hosted database's SQL editor, or run
-`npm run db:documents` with `DATABASE_URL` targeting that database. If the four
-new tables already exist, do not rerun the create-table script; verify the
-previous update completed instead. Then push the code and redeploy on Vercel.
+Apply `20261016_staff_documents.sql` first, then
+`20261021_document_participants.sql`. Run each script once. Each script uses a
+transaction, so an error rolls back its changes.
 
-If an older deployment fails at `prisma db push` with a data-loss warning, do
-not add `--accept-data-loss`. Deploy the updated build script above. The warning
-indicates a difference between the live database and Prisma schema; its exact
-cause requires the preceding warning lines to identify.
+## New empty development database
+
+`npm run db:push` creates the complete current schema. Do not run either SQL update
+on a database already created from the current schema.
+
+## Workflow
+
+TL and Management (including Super Admin) can initiate a document for 1-50 active
+staff members in the selected branch. Branch admins can review but do not initiate.
+
+- TL signs as initiator, then an independent manager approves and signs.
+- Management initiates and approves directly with one combined signature.
+- IR initiators describe the incident requiring explanation; each involved staff
+  member must provide their own explanation before signing. No one can submit
+  another staff member's explanation or signature.
+- Each participant can respond independently. The document stays open until all
+  respond; a declined signature does not prevent the others from responding.
+- Signed responses are immutable. Corrections create a separate revision requiring
+  fresh staff explanations and signatures.
+- Unsaved drafts have a form preview; saved documents have an exact inline PDF
+  preview and download/print controls. Audit history remains in the portal.

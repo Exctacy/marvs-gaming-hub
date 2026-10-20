@@ -47,6 +47,7 @@ model StaffProfile {
   preparedDocuments StaffDocument[] @relation("DocumentAuthor")
   receivedDocuments StaffDocument[] @relation("DocumentRecipient")
   documentNotices DocumentNotice[]
+  documentParticipations DocumentParticipant[]
 
   @@index([branchId, status])
 }
@@ -151,6 +152,8 @@ model StaffDocument {
   recipientName  String
   createdById    String
   preparedByName String
+  initiatedByRole String @default("")
+  workflowVersion Int @default(1)
   status         String @default("draft")
   content        Json
   contentVersion Int @default(1)
@@ -168,6 +171,7 @@ model StaffDocument {
   signatures     DocumentSignature[]
   events         DocumentEvent[]
   notices        DocumentNotice[]
+  participants   DocumentParticipant[]
 
   @@index([branchId, status, createdAt])
   @@index([recipientId, status])
@@ -185,10 +189,27 @@ model DocumentSignature {
   signerRole     String
   image          String
   statement      String
+  responseHash   String?
   signedAt       DateTime @default(now())
   document       StaffDocument @relation(fields: [documentId], references: [id])
 
-  @@unique([documentId, contentVersion, purpose])
+  @@unique([documentId, contentVersion, purpose, signerId], map: "DocumentSignature_version_purpose_signer_key")
+}
+
+model DocumentParticipant {
+  id           String @id @default(cuid())
+  documentId   String
+  staffId      String
+  staffName    String
+  status       String @default("pending")
+  explanation  String @default("")
+  responseNote String @default("")
+  respondedAt  DateTime?
+  document     StaffDocument @relation(fields: [documentId], references: [id])
+  staff        StaffProfile @relation(fields: [staffId], references: [id])
+
+  @@unique([documentId, staffId])
+  @@index([staffId, status])
 }
 
 model DocumentEvent {

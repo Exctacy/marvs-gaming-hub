@@ -2,18 +2,20 @@ import { z } from "zod";
 
 export const DOCUMENT_STATUSES = {
   draft: "Draft", pending_review: "Pending approval", returned: "Returned for changes",
-  awaiting_acknowledgment: "Awaiting staff signature", completed: "Acknowledged", declined: "Acknowledgment declined",
+  awaiting_acknowledgment: "Awaiting staff responses", completed: "All participants signed", declined: "Completed with declined signatures",
 } as const;
 export type DocumentStatus = keyof typeof DOCUMENT_STATUSES;
-export const canPrepareDocuments = (role: string) => ["team_leader", "admin", "management", "super_admin"].includes(role);
+export const canPrepareDocuments = (role: string) => ["team_leader", "management", "super_admin"].includes(role);
+export const managementInitiated = (doc: { initiatedByRole?: string }) => ["management", "super_admin"].includes(doc.initiatedByRole || "");
 export const canApproveDocuments = (role: string) => ["admin", "management", "super_admin"].includes(role);
 export const isGlobalDocumentManager = (role: string) => ["management", "super_admin"].includes(role);
 export const isIssuedDocument = (status: string) => ["awaiting_acknowledgment", "completed", "declined"].includes(status);
 
 type Actor = { id: string; role: string; branchId: string | null };
-type DocumentAccess = { createdById: string; recipientId: string; branchId: string; status: string };
+type DocumentAccess = { createdById: string; recipientId: string; branchId: string; status: string; participants?: { staffId: string }[] };
+export const isDocumentParticipant = (id: string, doc: Pick<DocumentAccess, "recipientId" | "participants">) => doc.participants?.length ? doc.participants.some((p) => p.staffId === id) : doc.recipientId === id;
 export function canReadDocument(user: Actor, doc: DocumentAccess) {
-  if (user.id === doc.recipientId && isIssuedDocument(doc.status)) return true;
+  if (isDocumentParticipant(user.id, doc) && isIssuedDocument(doc.status)) return true;
   const inBranch = isGlobalDocumentManager(user.role) || (!!user.branchId && user.branchId === doc.branchId);
   return inBranch && (canApproveDocuments(user.role) || (user.id === doc.createdById && canPrepareDocuments(user.role)));
 }
@@ -21,7 +23,7 @@ export function canEditDocument(user: Actor, doc: DocumentAccess) {
   return canReadDocument(user, doc) && user.id === doc.createdById && canPrepareDocuments(user.role) && ["draft", "returned"].includes(doc.status);
 }
 export function canReviewDocument(user: Actor, doc: DocumentAccess) {
-  return canReadDocument(user, doc) && canApproveDocuments(user.role) && user.id !== doc.createdById && user.id !== doc.recipientId && doc.status === "pending_review";
+  return canReadDocument(user, doc) && canApproveDocuments(user.role) && user.id !== doc.createdById && !isDocumentParticipant(user.id, doc) && doc.status === "pending_review";
 }
 
 const text = z.string().trim().max(6000);
@@ -30,16 +32,17 @@ const date = z.string().refine((v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.i
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Enter a valid time");
 export const incidentContentSchema = z.object({
   reportDate: date, reportTime: time, incidentDate: date, incidentTime: time,
-  personsInvolved: shortText, witnesses: shortText, whatHappened: text, howHappened: text,
+  personsInvolved: shortText, witnesses: shortText, whatHappened: text, howHappened: text.optional(),
   equipment: text, actionsTaken: text,
 }).strict();
 export const memoContentSchema = z.object({
   memoDate: date, from: shortText.min(1), subject: shortText.min(1), purpose: text,
   properties: text, acknowledgment: text.min(1), policyReference: text, disciplinaryAction: text,
 }).strict();
+const participantIds = z.array(z.string().min(1)).min(1, "Select at least one staff member").max(50).refine((ids) => new Set(ids).size === ids.length, "Select each staff member only once");
 export const documentInputSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("IR"), title: shortText.min(1), branchId: z.string().min(1), recipientId: z.string().min(1), content: incidentContentSchema }).strict(),
-  z.object({ kind: z.literal("MEMO"), title: shortText.min(1), branchId: z.string().min(1), recipientId: z.string().min(1), content: memoContentSchema }).strict(),
+  z.object({ kind: z.literal("IR"), title: shortText.min(1), branchId: z.string().min(1), participantIds, content: incidentContentSchema }).strict(),
+  z.object({ kind: z.literal("MEMO"), title: shortText.min(1), branchId: z.string().min(1), participantIds, content: memoContentSchema }).strict(),
 ]);
 export type DocumentInput = z.infer<typeof documentInputSchema>;
 export type DocumentContent = DocumentInput["content"];
@@ -49,18 +52,23 @@ export const actionSchema = z.object({
   action: z.enum(["submit", "approve", "return", "acknowledge", "decline", "revise"]),
   lockVersion: z.number().int().positive(), signature: signatureSchema.optional(),
   note: z.string().trim().max(6000).default(""), confirmed: z.boolean().default(false),
+  explanation: z.string().trim().max(6000).default(""),
 }).strict();
 
 export const PREPARE_STATEMENT = "I prepared this document and confirm it is ready for management review.";
-export const APPROVE_STATEMENT = "I reviewed and approve this version for issuance to the named staff member.";
+export const APPROVE_STATEMENT = "I reviewed and approve this version for issuance to the named staff participants.";
+export const INITIATE_APPROVE_STATEMENT = "I initiate and approve this document for issuance to all named participants.";
 export const IR_RECEIPT_STATEMENT = "I acknowledge receipt of this incident report. My signature confirms receipt and does not necessarily indicate agreement with its contents.";
 export function receiptStatement(kind: string, content: DocumentContent) {
   return kind === "IR" ? IR_RECEIPT_STATEMENT : (content as z.infer<typeof memoContentSchema>).acknowledgment;
 }
+export function participantStatement(kind: string, content: DocumentContent, workflowVersion: number) {
+  return receiptStatement(kind, content) + (kind === "IR" && workflowVersion === 2 ? " I confirm that the explanation submitted under my name is my own response." : "");
+}
 export function submissionError(input: Pick<DocumentInput, "kind" | "content">): string | null {
   if (input.kind === "IR") {
     const c = input.content as z.infer<typeof incidentContentSchema>;
-    if (!c.whatHappened || !c.howHappened || !c.actionsTaken) return "Complete what happened, how it happened, and immediate actions before submitting.";
+    if (!c.whatHappened) return "Describe the incident or issue requiring the staff members' explanations before issuing.";
   } else {
     const c = input.content as z.infer<typeof memoContentSchema>;
     if (!c.purpose || !c.properties || !c.acknowledgment) return "Complete purpose, properties, and acknowledgment before submitting.";
@@ -93,7 +101,7 @@ export const CONTENT_FIELDS = {
     ["reportDate", "Date of report", "date"], ["reportTime", "Time of report (Manila)", "time"],
     ["incidentDate", "Date of incident", "date"], ["incidentTime", "Time of incident (Manila)", "time"],
     ["personsInvolved", "Other persons involved", "text"], ["witnesses", "Witnesses", "text"],
-    ["whatHappened", "What happened", "textarea"], ["howHappened", "How it happened", "textarea"],
+    ["whatHappened", "Incident / issue requiring explanation", "textarea"],
     ["equipment", "Equipment / property involved", "textarea"], ["actionsTaken", "Immediate actions taken", "textarea"],
   ],
   MEMO: [
@@ -107,10 +115,15 @@ export const CONTENT_FIELDS = {
 export interface DocumentSignatureView {
   id: string; contentVersion: number; contentHash: string; purpose: string; signerId: string;
   signerName: string; signerRole: string; image: string; statement: string; signedAt: string;
+  responseHash?: string | null;
+}
+export interface DocumentParticipantView {
+  id: string; staffId: string; staffName: string; status: string; explanation: string; responseNote: string; respondedAt: string | null;
 }
 export interface StaffDocumentView {
   id: string; kind: "IR" | "MEMO"; title: string; branchId: string; branchName: string;
   recipientId: string; recipientName: string; createdById: string; preparedByName: string;
+  initiatedByRole: string; workflowVersion: number; participants: DocumentParticipantView[];
   status: DocumentStatus; content: DocumentContent; contentVersion: number; lockVersion: number;
   contentHash: string | null; revision: number; supersedesId: string | null;
   revisedBy?: { id: string; revision: number } | null;

@@ -2,15 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { canPrepareDocuments, canApproveDocuments, documentInputSchema } from "@/lib/staff-documents";
-import { DocumentError, documentBody, documentBranch, documentEvent, documentFailure, documentUser, validateDocumentRecipient } from "@/lib/staff-documents-server";
+import { DocumentError, documentBody, documentBranch, documentEvent, documentFailure, documentUser, validateDocumentParticipants } from "@/lib/staff-documents-server";
 
 export async function GET(req: NextRequest) {
   try {
     const user = await documentUser(req);
     const params = req.nextUrl.searchParams;
-    const mine = params.get("view") === "mine" || !canPrepareDocuments(user.role);
+    const mine = params.get("view") === "mine" || (!canPrepareDocuments(user.role) && !canApproveDocuments(user.role));
     const where: Prisma.StaffDocumentWhereInput = mine
-      ? { recipientId: user.id, status: { in: ["awaiting_acknowledgment", "completed", "declined"] } }
+      ? { participants: { some: { staffId: user.id } }, status: { in: ["awaiting_acknowledgment", "completed", "declined"] } }
       : { branchId: documentBranch(user, params.get("branchId")), ...(!canApproveDocuments(user.role) ? { createdById: user.id } : {}) };
     const status = params.get("status");
     if (status) where.AND = [{ status }];
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
       prisma.staffDocument.findMany({ where, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 20, skip: (page - 1) * 20,
         select: { id: true, kind: true, title: true, branchName: true, recipientName: true, preparedByName: true, status: true, revision: true, createdAt: true } }),
       prisma.staffDocument.count({ where }),
-      prisma.staffDocument.count({ where: { recipientId: user.id, status: "awaiting_acknowledgment" } }),
+      prisma.staffDocument.count({ where: { participants: { some: { staffId: user.id, status: "pending" } }, status: "awaiting_acknowledgment" } }),
     ]);
     return NextResponse.json({ documents, total, page, awaitingSignature }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (e) { return documentFailure(e); }
@@ -36,8 +36,9 @@ export async function POST(req: NextRequest) {
     const body = parsed.data;
     const branchId = documentBranch(user, body.branchId);
     const document = await prisma.$transaction(async (tx) => {
-      const { branch, recipient } = await validateDocumentRecipient(tx, branchId, body.recipientId, user.id);
-      const doc = await tx.staffDocument.create({ data: { kind: body.kind, title: body.title, branchId, branchName: branch.name, recipientId: recipient.id, recipientName: recipient.fullName, createdById: user.id, preparedByName: user.fullName, content: body.content } });
+      const { branch, participants } = await validateDocumentParticipants(tx, branchId, body.participantIds, user.id);
+      if (body.kind === "IR" && body.content.howHappened) throw new DocumentError(400, "Only the involved staff can provide their incident explanations.");
+      const doc = await tx.staffDocument.create({ data: { kind: body.kind, title: body.title, branchId, branchName: branch.name, recipientId: participants[0].staffId, recipientName: participants.map((p) => p.staffName).join(", "), initiatedByRole: user.role, workflowVersion: 2, participants: { create: participants }, createdById: user.id, preparedByName: user.fullName, content: body.content } });
       await documentEvent(tx, user, doc, "CREATED");
       return doc;
     });

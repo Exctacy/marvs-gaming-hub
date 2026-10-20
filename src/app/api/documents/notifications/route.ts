@@ -6,7 +6,7 @@ import { documentBody, documentFailure, documentUser, DocumentError } from "@/li
 export async function GET(req: NextRequest) {
   try {
     const user = await documentUser(req);
-    const notices = await prisma.documentNotice.findMany({ where: { staffId: user.id, readAt: null }, orderBy: { createdAt: "desc" }, take: 50, include: { document: { select: { createdById: true, recipientId: true, branchId: true, status: true } } } });
+    const notices = await prisma.documentNotice.findMany({ where: { staffId: user.id, readAt: null }, orderBy: { createdAt: "desc" }, take: 50, include: { document: { select: { participants: { select: { staffId: true } }, createdById: true, recipientId: true, branchId: true, status: true } } } });
     return NextResponse.json({ notices: notices.filter((n) => canReadDocument(user, n.document)).map(({ document: _document, ...notice }) => notice) }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (e) { return documentFailure(e); }
 }
