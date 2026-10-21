@@ -123,11 +123,11 @@ original PDF artwork.
 
 - Team Leaders and Management initiate documents for up to 50 active staff in the selected branch.
 - Branch admins review their branch; Management and Super Admin can review across branches.
-- TL initiators need an independent approver. Management initiators issue directly with one "Initiated and approved by" signature. Participants cannot approve a TL-initiated document.
+- TL initiators need an independent approver. Management issues an IR request with one "Initiated by" signature (memos retain the combined approval signature). Participants cannot approve a TL-initiated document.
 - Staff see only their issued documents under My documents, regardless of later branch transfer.
 - Preparation, approval, and staff signatures are bound to the stored content version and SHA-256 fingerprint.
 - Submitted/issued content is locked; returned drafts need a saved new version, and issued corrections create linked revisions with fresh signatures.
-- Each IR participant writes their own explanation and signs it; initiators cannot provide explanations for staff. Memo participants acknowledge separately. Declining requires a reason and does not block other participants.
+- IR initiators issue a request with optional instructions. One selected staff member completes the shared incident report, including witnesses, others involved, reason, equipment, and actions; everyone reviews and signs that same locked report. Declines require a reason. Memo behavior is unchanged.
 - Document history, audit entries, notices, and state transitions commit in one transaction. Optimistic locking rejects stale actions.
 - Notices are private, in-app only. The sidebar refreshes its unread badge every minute; there is no email or SMS delivery.
 
@@ -136,14 +136,14 @@ Database setup for an existing installation is documented in
 for policy and API workflow tests. API tests use an in-memory transaction double;
 they do not replace validation against a running PostgreSQL instance.
 
-Saved documents offer an exact inline PDF preview; unsaved drafts have a form preview. Apply the October 21 participant update before deploying this version (see the database setup link above).
+Saved documents offer an exact inline PDF preview; unsaved drafts have a form preview. Apply both October 21 updates (participants first, then shared incident report) before deploying this version (see the database setup link above).
 
 ### Manual verification
 
 1. Log in as a TL, select an IR or Memo, select one or more active staff members, and save a draft.
 2. Review and sign as preparer; verify the staff account cannot access the pending draft.
 3. As an independent branch manager, return with a reason or approve and sign.
-4. As each participant, open My documents, add your own IR explanation, and sign or decline with a reason. The document stays open until all participants respond.
+4. As each participant, open My documents, complete the shared IR once as an involved staff member, then review and sign it as every participant (or decline with a reason). The document stays open until all participants respond.
 5. Verify other staff/branch admins cannot access the document or its PDF.
 6. Preview the saved PDF inline and download/print it. Check long explanations, every staff signature, and the combined management signature. History remains in the portal.
 7. Create a correction; verify original signatures remain on the original and the new draft has none.

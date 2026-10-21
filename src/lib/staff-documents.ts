@@ -35,41 +35,50 @@ export const incidentContentSchema = z.object({
   personsInvolved: shortText, witnesses: shortText, whatHappened: text, howHappened: text.optional(),
   equipment: text, actionsTaken: text,
 }).strict();
+export const sharedIncidentSchema = incidentContentSchema.extend({
+  whatHappened: text.min(1, "Describe what happened"),
+  howHappened: text.min(1, "Enter the reason / explanation for the incident"),
+  equipment: text.min(1, "List the equipment involved, or enter None"),
+  actionsTaken: text.min(1, "Describe the immediate actions taken, or enter None"),
+});
+export type SharedIncidentDetails = z.infer<typeof sharedIncidentSchema>;
+export const incidentRequestSchema = z.object({ instructions: text.default("") }).strict();
 export const memoContentSchema = z.object({
   memoDate: date, from: shortText.min(1), subject: shortText.min(1), purpose: text,
   properties: text, acknowledgment: text.min(1), policyReference: text, disciplinaryAction: text,
 }).strict();
 const participantIds = z.array(z.string().min(1)).min(1, "Select at least one staff member").max(50).refine((ids) => new Set(ids).size === ids.length, "Select each staff member only once");
 export const documentInputSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("IR"), title: shortText.min(1), branchId: z.string().min(1), participantIds, content: incidentContentSchema }).strict(),
+  z.object({ kind: z.literal("IR"), title: shortText.min(1), branchId: z.string().min(1), participantIds, content: incidentRequestSchema }).strict(),
   z.object({ kind: z.literal("MEMO"), title: shortText.min(1), branchId: z.string().min(1), participantIds, content: memoContentSchema }).strict(),
 ]);
 export type DocumentInput = z.infer<typeof documentInputSchema>;
-export type DocumentContent = DocumentInput["content"];
+export type DocumentContent = DocumentInput["content"] | z.infer<typeof incidentContentSchema>;
 // Only bounded PNG data URLs from the signature canvas are accepted.
 export const signatureSchema = z.string().max(180000).regex(/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/, "Draw your signature");
 export const actionSchema = z.object({
-  action: z.enum(["submit", "approve", "return", "acknowledge", "decline", "revise"]),
+  action: z.enum(["submit", "approve", "return", "acknowledge", "decline", "revise", "submit_report"]),
   lockVersion: z.number().int().positive(), signature: signatureSchema.optional(),
   note: z.string().trim().max(6000).default(""), confirmed: z.boolean().default(false),
   explanation: z.string().trim().max(6000).default(""),
+  incidentDetails: sharedIncidentSchema.optional(),
 }).strict();
 
 export const PREPARE_STATEMENT = "I prepared this document and confirm it is ready for management review.";
 export const APPROVE_STATEMENT = "I reviewed and approve this version for issuance to the named staff participants.";
 export const INITIATE_APPROVE_STATEMENT = "I initiate and approve this document for issuance to all named participants.";
+export const IR_INITIATE_STATEMENT = "I initiate and issue this IR request to the selected staff. The involved staff will complete the incident report.";
+export const IR_AUTHORIZE_STATEMENT = "I authorize issuance of this IR request. Incident details will be provided by the involved staff.";
 export const IR_RECEIPT_STATEMENT = "I acknowledge receipt of this incident report. My signature confirms receipt and does not necessarily indicate agreement with its contents.";
 export function receiptStatement(kind: string, content: DocumentContent) {
   return kind === "IR" ? IR_RECEIPT_STATEMENT : (content as z.infer<typeof memoContentSchema>).acknowledgment;
 }
 export function participantStatement(kind: string, content: DocumentContent, workflowVersion: number) {
+  if (kind === "IR" && workflowVersion === 3) return "I have reviewed the shared incident report completed by an involved staff member and acknowledge it with my signature. My signature confirms receipt and review, and does not necessarily mean agreement with every statement. Any reservation is recorded in my additional note.";
   return receiptStatement(kind, content) + (kind === "IR" && workflowVersion === 2 ? " I confirm that the explanation submitted under my name is my own response." : "");
 }
-export function submissionError(input: Pick<DocumentInput, "kind" | "content">): string | null {
-  if (input.kind === "IR") {
-    const c = input.content as z.infer<typeof incidentContentSchema>;
-    if (!c.whatHappened) return "Describe the incident or issue requiring the staff members' explanations before issuing.";
-  } else {
+export function submissionError(input: { kind: "IR" | "MEMO"; content: DocumentContent }): string | null {
+  if (input.kind === "MEMO") {
     const c = input.content as z.infer<typeof memoContentSchema>;
     if (!c.purpose || !c.properties || !c.acknowledgment) return "Complete purpose, properties, and acknowledgment before submitting.";
   }
@@ -83,10 +92,7 @@ export function manilaDateTime(now = new Date()) {
 }
 export function defaultDocumentContent(kind: "IR" | "MEMO"): DocumentContent {
   const { date, time } = manilaDateTime();
-  return kind === "IR" ? {
-    reportDate: date, reportTime: time, incidentDate: date, incidentTime: time,
-    personsInvolved: "", witnesses: "", whatHappened: "", howHappened: "", equipment: "", actionsTaken: "",
-  } : {
+  return kind === "IR" ? { instructions: "" } : {
     memoDate: date, from: "Management", subject: "Acknowledgment of MARVS Gaming Hub Properties",
     purpose: "This memorandum serves as formal acknowledgment of the properties, equipment, and facilities assigned to the staff member at the branch identified above.",
     properties: "Computers/Clients: PC clients, mouse, keyboard, headset, and gaming chair.\nNetworking Equipment: Router, switch, and LAN cable.\nServer PC: Software, apps, and games.\nOthers: Kitchen equipment, webcam, gamepad controller, and technician tools.",
@@ -101,7 +107,8 @@ export const CONTENT_FIELDS = {
     ["reportDate", "Date of report", "date"], ["reportTime", "Time of report (Manila)", "time"],
     ["incidentDate", "Date of incident", "date"], ["incidentTime", "Time of incident (Manila)", "time"],
     ["personsInvolved", "Other persons involved", "text"], ["witnesses", "Witnesses", "text"],
-    ["whatHappened", "Incident / issue requiring explanation", "textarea"],
+    ["whatHappened", "What happened", "textarea"],
+    ["howHappened", "Reason / explanation of the incident", "textarea"],
     ["equipment", "Equipment / property involved", "textarea"], ["actionsTaken", "Immediate actions taken", "textarea"],
   ],
   MEMO: [
@@ -111,11 +118,16 @@ export const CONTENT_FIELDS = {
     ["disciplinaryAction", "Disciplinary action (management review)", "textarea"],
   ],
 } as const;
+export function defaultSharedIncident(): SharedIncidentDetails {
+  const { date, time } = manilaDateTime();
+  return { reportDate: date, reportTime: time, incidentDate: date, incidentTime: time, personsInvolved: "", witnesses: "", whatHappened: "", howHappened: "", equipment: "", actionsTaken: "" };
+}
 
 export interface DocumentSignatureView {
   id: string; contentVersion: number; contentHash: string; purpose: string; signerId: string;
   signerName: string; signerRole: string; image: string; statement: string; signedAt: string;
   responseHash?: string | null;
+  reportHash?: string | null;
 }
 export interface DocumentParticipantView {
   id: string; staffId: string; staffName: string; status: string; explanation: string; responseNote: string; respondedAt: string | null;
@@ -124,6 +136,7 @@ export interface StaffDocumentView {
   id: string; kind: "IR" | "MEMO"; title: string; branchId: string; branchName: string;
   recipientId: string; recipientName: string; createdById: string; preparedByName: string;
   initiatedByRole: string; workflowVersion: number; participants: DocumentParticipantView[];
+  incidentReport?: { id: string; details: SharedIncidentDetails; submittedById: string; submittedByName: string; reportHash: string; submittedAt: string } | null;
   status: DocumentStatus; content: DocumentContent; contentVersion: number; lockVersion: number;
   contentHash: string | null; revision: number; supersedesId: string | null;
   revisedBy?: { id: string; revision: number } | null;

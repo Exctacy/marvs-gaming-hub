@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { SignJWT } from "jose";
 import { NextRequest } from "next/server";
-import { defaultDocumentContent } from "../src/lib/staff-documents";
+import { defaultDocumentContent, defaultSharedIncident } from "../src/lib/staff-documents";
 
 test("document API enforces identity, branch, approval, locking, signatures, and revisions", async () => {
   process.env.JWT_SECRET = "staff-document-tests-only-32-character-secret";
@@ -30,7 +30,7 @@ test("document API enforces identity, branch, approval, locking, signatures, and
     },
     staffDocument: {
       create: async ({ data }: TestDocument) => {
-        const doc = { id: `doc-${db.docs.length + 1}`, status: "draft", contentVersion: 1, lockVersion: 1, revision: 1, contentHash: null, supersedesId: null, createdAt: new Date(), updatedAt: new Date(), ...structuredClone(data) };
+        const doc = { id: `doc-${db.docs.length + 1}`, status: "draft", contentVersion: 1, lockVersion: 1, revision: 1, contentHash: null, supersedesId: null, incidentReport: null, createdAt: new Date(), updatedAt: new Date(), ...structuredClone(data) };
         doc.participants = (data.participants?.create || []).map((p: TestDocument, index: number) => ({ id: `${doc.id}-participant-${index}`, documentId: doc.id, status: "pending", explanation: "", responseNote: "", respondedAt: null, ...p }));
         db.docs.push(doc); return structuredClone(doc);
       },
@@ -48,6 +48,9 @@ test("document API enforces identity, branch, approval, locking, signatures, and
         return { count: 1 };
       },
       update: async ({ where, data }: TestDocument) => { const doc = db.docs.find((d) => d.id === where.id)!; Object.assign(doc, data); return doc; },
+    },
+    sharedIncidentReport: {
+      create: async ({ data }: TestDocument) => { const doc = db.docs.find((d) => d.id === data.documentId)!; if (doc.incidentReport) throw new Error("Duplicate shared report"); const report = { id: "report-" + doc.id, submittedAt: new Date(), ...structuredClone(data) }; doc.incidentReport = report; return report; },
     },
     documentParticipant: {
       deleteMany: async ({ where }: TestDocument) => { db.docs.find((d) => d.id === where.documentId)!.participants = []; },
@@ -80,7 +83,8 @@ test("document API enforces identity, branch, approval, locking, signatures, and
   const token = async () => new SignJWT({ staffId: currentUser.id }).setProtectedHeader({ alg: "HS256" }).setExpirationTime("1h").sign(new TextEncoder().encode(process.env.JWT_SECRET));
   const req = async (method: string, body?: unknown, origin = "http://localhost:3000") => new NextRequest("http://localhost:3000/api/documents", { method, headers: { cookie: `marvs_session=${await token()}`, origin, "Content-Type": "application/json" }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
   const context = (id = "doc-1") => ({ params: Promise.resolve({ id }) });
-  const ir = { ...defaultDocumentContent("IR"), whatHappened: "Keyboard damaged", actionsTaken: "Spare keyboard installed" };
+  const ir = defaultDocumentContent("IR");
+  const reportDetails = { ...defaultSharedIncident(), witnesses: "Staff Two", personsInvolved: "None", whatHappened: "Keyboard damaged", howHappened: "It stopped responding during the shift", equipment: "PC-07 keyboard", actionsTaken: "Spare keyboard installed" };
   const input = { kind: "IR", title: "Incident test", branchId: "a", participantIds: ["staff"], content: ir };
   const signImage = (() => {
     // Real PNG validates signature decoding and PDF embedding without a browser canvas.
@@ -139,6 +143,8 @@ test("document API enforces identity, branch, approval, locking, signatures, and
     currentUser = people[4]; assert.equal((await action("acknowledge")).status, 404);
     currentUser = people[1];
     assert.equal((await detail.GET(await req("GET"), context())).status, 200);
+    assert.equal((await action("acknowledge")).status, 400);
+    assert.equal((await action("submit_report", { incidentDetails: reportDetails })).status, 200);
     assert.equal((await action("acknowledge", { confirmed: false })).status, 400);
     assert.equal((await action("acknowledge", { note: "Received with explanation" })).status, 200);
     assert.equal(db.docs[0].status, "completed");
@@ -173,22 +179,45 @@ test("document API enforces identity, branch, approval, locking, signatures, and
     currentUser = people[1];
     assert.equal((await action("acknowledge", { explanation: "" }, "doc-4")).status, 400);
     assert.equal((await action("acknowledge", { staffId: "other" }, "doc-4")).status, 400);
-    assert.equal((await action("acknowledge", { explanation: "My own explanation" }, "doc-4")).status, 200);
+    currentUser = people[5];
+    assert.equal((await action("submit_report", { incidentDetails: reportDetails }, "doc-4")).status, 403);
+    currentUser = people[1];
+    assert.equal((await action("submit_report", { incidentDetails: { ...reportDetails, witnesses: ["invalid"] } }, "doc-4")).status, 400);
+    assert.equal((await action("submit_report", { incidentDetails: reportDetails, confirmed: false }, "doc-4")).status, 400);
+    assert.equal((await action("submit_report", { incidentDetails: reportDetails }, "doc-4")).status, 200);
+    assert.equal(db.docs[3].incidentReport.submittedById, "staff");
+    assert.equal((await action("acknowledge", { explanation: "" }, "doc-4")).status, 200);
     assert.equal(db.docs[3].status, "awaiting_acknowledgment");
     assert.equal(db.docs[3].participants.find((p: TestDocument) => p.staffId === "other").explanation, "");
     assert.equal((await action("acknowledge", {}, "doc-4")).status, 403);
     currentUser = people[4];
+    assert.equal((await action("submit_report", { incidentDetails: { ...reportDetails, whatHappened: "Overwritten" } }, "doc-4")).status, 409);
+    assert.equal(db.docs[3].incidentReport.details.whatHappened, reportDetails.whatHappened);
     assert.equal((await action("acknowledge", { lockVersion: 2 }, "doc-4")).status, 409);
     assert.equal((await action("acknowledge", { explanation: "A different participant's account" }, "doc-4")).status, 200);
     assert.equal(db.docs[3].status, "completed");
     assert.equal(db.signatures.filter((s) => s.documentId === "doc-4" && s.purpose === "acknowledged").length, 2);
     assert.ok(db.signatures.find((s) => s.documentId === "doc-4" && s.signerId === "staff")!.responseHash);
+    assert.equal(db.signatures.find((s) => s.documentId === "doc-4" && s.signerId === "staff")!.reportHash, db.signatures.find((s) => s.documentId === "doc-4" && s.signerId === "other")!.reportHash);
     assert.equal((await pdfRoute.GET(await req("GET"), context("doc-4"))).status, 200);
     const preview = await pdfRoute.GET(new NextRequest("http://localhost:3000/api/documents/doc-4/pdf?preview=1", { headers: { cookie: `marvs_session=${await token()}` } }), context("doc-4"));
     assert.equal(preview.status, 200); assert.match(preview.headers.get("content-disposition") || "", /^inline;/);
-    db.docs[3].participants[0].explanation = "Tampered after signing";
+    db.docs[3].incidentReport.details.witnesses = "Tampered after signing";
     assert.equal((await pdfRoute.GET(await req("GET"), context("doc-4"))).status, 409);
     assert.equal((await detail.GET(await req("GET"), context("doc-4"))).status, 409);
+    currentUser = people[5];
+    await tx.staffDocument.create({ data: { ...db.docs[3], id: "doc-5", status: "draft", contentHash: null, signatures: [], initiatedByRole: "management", workflowVersion: 2, content: { ...reportDetails, whatHappened: "" }, incidentReport: null, participants: { create: [{ staffId: "staff", staffName: "staff" }] } } });
+    assert.equal((await action("submit", {}, "doc-5")).status, 200);
+    assert.equal(db.docs[4].workflowVersion, 3);
+    assert.deepEqual(db.docs[4].content, { instructions: "" });
+    assert.ok(db.events.some((e) => e.documentId === "doc-5" && e.action === "IR_DRAFT_UPGRADED"));
+    await tx.staffDocument.create({ data: { ...db.docs[4], id: "doc-6", status: "awaiting_acknowledgment", workflowVersion: 2, content: reportDetails, incidentReport: null, participants: { create: [{ staffId: "staff", staffName: "staff" }] } } });
+    db.docs[5].contentHash = documentHash(db.docs[5] as any);
+    db.signatures.push({ documentId: "doc-6", contentVersion: db.docs[5].contentVersion, contentHash: db.docs[5].contentHash, purpose: "approved", signerId: "management" });
+    currentUser = people[1];
+    assert.equal((await action("acknowledge", {}, "doc-6")).status, 200);
+    assert.equal(db.docs[5].workflowVersion, 2);
+    assert.equal(db.docs[5].incidentReport, null);
     currentUser = people[3]; assert.equal((await pdfRoute.GET(await req("GET"), context())).status, 404);
     currentUser = people[1]; db.docs[0].title = "Tampered";
     assert.equal((await pdfRoute.GET(await req("GET"), context())).status, 409);

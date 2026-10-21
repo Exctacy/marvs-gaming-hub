@@ -1,5 +1,5 @@
 ﻿import { jsPDF } from "jspdf";
-import { CONTENT_FIELDS, DOCUMENT_STATUSES, managementInitiated, receiptStatement, type StaffDocumentView } from "./staff-documents";
+import { CONTENT_FIELDS, DOCUMENT_STATUSES, managementInitiated, participantStatement, receiptStatement, type StaffDocumentView } from "./staff-documents";
 
 /** Formal printable form. System activity stays in the portal rather than bloating the paper copy. */
 export function buildStaffDocumentPdf(doc: StaffDocumentView): Uint8Array {
@@ -31,9 +31,15 @@ export function buildStaffDocumentPdf(doc: StaffDocumentView): Uint8Array {
   if (["draft", "returned", "pending_review"].includes(doc.status)) text("DRAFT / NOT YET ISSUED", 8, true);
   text(`To / staff involved: ${doc.participants.map((p) => p.staffName).join(", ")}`, 9);
   text(`Initiated by: ${doc.preparedByName}`, 9); y += 6;
-  const content = doc.content as unknown as Record<string, string>;
+  const sharedIR = doc.kind === "IR" && doc.workflowVersion === 3;
+  const content = (sharedIR ? doc.incidentReport?.details || {} : doc.content) as unknown as Record<string, string>;
+  if (sharedIR) {
+    section("Instructions to involved staff", (doc.content as { instructions?: string }).instructions || "Complete the shared incident report, then review and sign.");
+    if (doc.incidentReport) text(`Report completed by: ${doc.incidentReport.submittedByName} | ${timestamp(doc.incidentReport.submittedAt)}`, 8.5);
+    else section("Shared incident report", "Awaiting completion by one involved staff member. Incident details, witnesses, other persons involved, equipment, and immediate actions will be provided by staff.");
+  }
   // Compact the basic date/time information into pairs; long narrative sections wrap naturally.
-  const fields = CONTENT_FIELDS[doc.kind];
+  const fields = sharedIR && !doc.incidentReport ? [] : CONTENT_FIELDS[doc.kind];
   const basic = fields.filter(([, , type]) => type !== "textarea");
   for (let i = 0; i < basic.length; i += 2) {
     const row = basic.slice(i, i + 2), colWidth = (width - 18) / 2;
@@ -44,9 +50,9 @@ export function buildStaffDocumentPdf(doc: StaffDocumentView): Uint8Array {
     columns.forEach((lines, col) => { font(9); lines.forEach((line, lineIndex) => pdf.text(line, margin + col * (colWidth + 18), y + 9 + lineIndex * 13)); }); y += height;
   }
   for (const [key, label, type] of fields) if (type === "textarea" && key !== "acknowledgment") section(label, content[key]);
-  if (content.howHappened) section("Previously recorded incident account (legacy)", content.howHappened);
-  section(doc.kind === "IR" ? "Staff explanations and signatures" : "Staff acknowledgments", receiptStatement(doc.kind, doc.content));
-  const compactMemo = doc.kind === "MEMO" && doc.participants.every((p) => !p.responseNote);
+
+  section(sharedIR ? "Staff signatures on the shared report" : doc.kind === "IR" ? "Staff explanations and signatures" : "Staff acknowledgments", (sharedIR ? participantStatement(doc.kind, doc.content, doc.workflowVersion) : receiptStatement(doc.kind, doc.content)));
+  const compactMemo = (doc.kind === "MEMO" || sharedIR) && doc.participants.every((p) => !p.responseNote);
   if (compactMemo) {
     for (let i = 0; i < doc.participants.length; i += 2) {
       const row = doc.participants.slice(i, i + 2);
@@ -66,13 +72,13 @@ export function buildStaffDocumentPdf(doc: StaffDocumentView): Uint8Array {
   }
   for (const participant of compactMemo ? [] : doc.participants) {
     const sig = findSignature("acknowledged", participant.staffId);
-    const explanation = doc.kind === "IR" ? participant.explanation || "Awaiting the staff member's explanation." : "";
+    const explanation = doc.kind === "IR" && !sharedIR ? participant.explanation || "Awaiting the staff member's explanation." : "";
     const measured = linesFor(explanation).length * 13.5 + (participant.responseNote ? linesFor(participant.responseNote).length * 13.5 + 20 : 0) + 100;
     ensure(Math.min(measured, 230));
     pdf.setDrawColor(195, 203, 214); pdf.setLineWidth(0.5); pdf.line(margin, y, pageWidth - margin, y); y += 8;
     text(`${participant.staffName} - ${participant.status === "pending" ? "Awaiting response" : participant.status}`, 10, true);
     continuingParticipant = participant.staffName;
-    if (doc.kind === "IR") section("Explanation / reason provided by staff", explanation);
+    if (doc.kind === "IR" && !sharedIR) section("Explanation / reason provided by staff", explanation);
     if (participant.responseNote) section(participant.status === "declined" ? "Reason for declining" : "Additional response", participant.responseNote);
     ensure(70);
     if (sig) pdf.addImage(sig.image, "PNG", margin, y, 128, 44.8);
@@ -81,7 +87,7 @@ export function buildStaffDocumentPdf(doc: StaffDocumentView): Uint8Array {
     text(sig ? `Signed: ${timestamp(sig.signedAt)}` : participant.respondedAt ? `Responded: ${timestamp(participant.respondedAt)} - no signature` : "Signature / date pending", 8); y += 10;
     continuingParticipant = "";
   }
-  const officials = managementInitiated(doc) ? [["initiated_approved", "INITIATED AND APPROVED BY"]] : [["prepared", "INITIATED BY"], ["approved", "APPROVED BY"]];
+  const officials = managementInitiated(doc) ? [["initiated_approved", sharedIR ? "INITIATED BY" : "INITIATED AND APPROVED BY"]] : [["prepared", "INITIATED BY"], ["approved", sharedIR ? "AUTHORIZED FOR ISSUANCE BY" : "APPROVED BY"]];
   const colWidth = width / officials.length;
   const officialHeight = Math.max(...officials.map(([purpose]) => linesFor(findSignature(purpose)?.signerName || (purpose !== "approved" ? doc.preparedByName : "Pending management approval"), 9, colWidth - 12, true).length * 12 + 91));
   ensure(officialHeight + 12); y += 12;

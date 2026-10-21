@@ -172,6 +172,7 @@ model StaffDocument {
   events         DocumentEvent[]
   notices        DocumentNotice[]
   participants   DocumentParticipant[]
+  incidentReport SharedIncidentReport?
 
   @@index([branchId, status, createdAt])
   @@index([recipientId, status])
@@ -190,6 +191,7 @@ model DocumentSignature {
   image          String
   statement      String
   responseHash   String?
+  reportHash     String?
   signedAt       DateTime @default(now())
   document       StaffDocument @relation(fields: [documentId], references: [id])
 
@@ -210,6 +212,17 @@ model DocumentParticipant {
 
   @@unique([documentId, staffId])
   @@index([staffId, status])
+}
+
+model SharedIncidentReport {
+  id              String @id @default(cuid())
+  documentId      String @unique
+  details         Json
+  submittedById   String
+  submittedByName String
+  reportHash      String
+  submittedAt     DateTime @default(now())
+  document        StaffDocument @relation(fields: [documentId], references: [id])
 }
 
 model DocumentEvent {

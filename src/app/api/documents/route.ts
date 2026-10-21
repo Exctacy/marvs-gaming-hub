@@ -37,8 +37,8 @@ export async function POST(req: NextRequest) {
     const branchId = documentBranch(user, body.branchId);
     const document = await prisma.$transaction(async (tx) => {
       const { branch, participants } = await validateDocumentParticipants(tx, branchId, body.participantIds, user.id);
-      if (body.kind === "IR" && body.content.howHappened) throw new DocumentError(400, "Only the involved staff can provide their incident explanations.");
-      const doc = await tx.staffDocument.create({ data: { kind: body.kind, title: body.title, branchId, branchName: branch.name, recipientId: participants[0].staffId, recipientName: participants.map((p) => p.staffName).join(", "), initiatedByRole: user.role, workflowVersion: 2, participants: { create: participants }, createdById: user.id, preparedByName: user.fullName, content: body.content } });
+
+      const doc = await tx.staffDocument.create({ data: { kind: body.kind, title: body.title, branchId, branchName: branch.name, recipientId: participants[0].staffId, recipientName: participants.map((p) => p.staffName).join(", "), initiatedByRole: user.role, workflowVersion: body.kind === "IR" ? 3 : 2, participants: { create: participants }, createdById: user.id, preparedByName: user.fullName, content: body.content } });
       await documentEvent(tx, user, doc, "CREATED");
       return doc;
     });

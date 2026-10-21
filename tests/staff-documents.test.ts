@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { canReadDocument, canEditDocument, canReviewDocument, documentInputSchema, defaultDocumentContent, manilaDateTime, receiptStatement, IR_RECEIPT_STATEMENT, submissionError } from "../src/lib/staff-documents";
+import { canReadDocument, canEditDocument, canReviewDocument, documentInputSchema, defaultDocumentContent, manilaDateTime, receiptStatement, IR_RECEIPT_STATEMENT, submissionError, sharedIncidentSchema, defaultSharedIncident } from "../src/lib/staff-documents";
 
 const doc = { createdById: "tl-a", recipientId: "staff-a", branchId: "a", status: "draft" };
 const actor = (id: string, role: string, branchId: string | null = "a") => ({ id, role, branchId });
@@ -45,7 +45,7 @@ test("templates validate nested data, dates, and payload bounds", () => {
   assert.equal(documentInputSchema.safeParse({ ...input, status: "completed" }).success, false);
 });
 test("submission needs incident details and receipt language stays distinct", () => {
-  assert.ok(submissionError({ kind: "IR", content: defaultDocumentContent("IR") }));
+  assert.equal(submissionError({ kind: "IR", content: defaultDocumentContent("IR") }), null);
   assert.equal(submissionError({ kind: "MEMO", content: defaultDocumentContent("MEMO") }), null);
   assert.equal(receiptStatement("IR", defaultDocumentContent("IR")), IR_RECEIPT_STATEMENT);
   assert.match(receiptStatement("MEMO", defaultDocumentContent("MEMO")), /responsibility/);
@@ -63,4 +63,14 @@ test("all participants have issued access, and participants cannot approve", () 
   assert.equal(documentInputSchema.safeParse({ ...input, participantIds: [] }).success, false);
   assert.equal(documentInputSchema.safeParse({ ...input, participantIds: ["a", "a"] }).success, false);
   assert.equal(documentInputSchema.safeParse({ ...input, participantIds: ["a", "b"] }).success, true);
+});
+
+test("shared IR fields belong to staff, while request fields contain only optional instructions", () => {
+ const request = { kind: "IR", title: "IR", branchId: "a", participantIds: ["staff"], content: {} };
+ assert.equal(documentInputSchema.safeParse(request).success, true);
+ for (const key of ["witnesses", "personsInvolved", "equipment", "actionsTaken", "whatHappened", "howHappened", "incidentDate"]) assert.equal(documentInputSchema.safeParse({ ...request, content: { [key]: "Initiator supplied" } }).success, false);
+ const details = { ...defaultSharedIncident(), whatHappened: "Failure", howHappened: "Reported during shift", equipment: "None", actionsTaken: "None" };
+ assert.equal(sharedIncidentSchema.safeParse(details).success, true);
+ assert.equal(sharedIncidentSchema.safeParse({ ...details, incidentDate: "2026-02-30" }).success, false);
+ assert.equal(sharedIncidentSchema.safeParse({ ...details, actionsTaken: "" }).success, false);
 });

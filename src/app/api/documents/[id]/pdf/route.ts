@@ -9,7 +9,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const user = await documentUser(req);
     const { id } = await params;
-    const doc = await prisma.staffDocument.findUnique({ where: { id }, include: { participants: { orderBy: { id: "asc" } }, signatures: { orderBy: { signedAt: "asc" } }, events: { orderBy: { createdAt: "asc" } }, revisedBy: { select: { id: true, revision: true } } } });
+    const doc = await prisma.staffDocument.findUnique({ where: { id }, include: { incidentReport: true, participants: { orderBy: { id: "asc" } }, signatures: { orderBy: { signedAt: "asc" } }, events: { orderBy: { createdAt: "asc" } }, revisedBy: { select: { id: true, revision: true } } } });
     if (!doc || !canReadDocument(user, doc)) throw new DocumentError(404, "Document not found.");
     if (doc.contentHash && doc.contentHash !== documentHash(doc)) throw new DocumentError(409, "Document integrity check failed. Contact management.");
     verifyParticipantResponses(doc);

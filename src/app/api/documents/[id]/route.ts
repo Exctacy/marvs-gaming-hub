@@ -8,7 +8,7 @@ export async function GET(req: NextRequest, { params }: Context) {
   try {
     const user = await documentUser(req);
     const { id } = await params;
-    const document = await prisma.staffDocument.findUnique({ where: { id }, include: { participants: { orderBy: { id: "asc" } }, signatures: { orderBy: { signedAt: "asc" } }, events: { orderBy: { createdAt: "asc" } }, revisedBy: { select: { id: true, revision: true } } } });
+    const document = await prisma.staffDocument.findUnique({ where: { id }, include: { incidentReport: true, participants: { orderBy: { id: "asc" } }, signatures: { orderBy: { signedAt: "asc" } }, events: { orderBy: { createdAt: "asc" } }, revisedBy: { select: { id: true, revision: true } } } });
     if (!document || !canReadDocument(user, document)) throw new DocumentError(404, "Document not found.");
     if (document.contentHash && document.contentHash !== documentHash(document)) throw new DocumentError(409, "Document integrity check failed. Contact management.");
     verifyParticipantResponses(document);
@@ -31,8 +31,8 @@ export async function PUT(req: NextRequest, { params }: Context) {
       if (!canEditDocument(user, doc)) throw new DocumentError(403, "Only the preparer can edit a draft or returned document.");
       if (body.branchId !== doc.branchId || body.kind !== doc.kind) throw new DocumentError(400, "Document type and branch cannot change.");
       const { participants } = await validateDocumentParticipants(tx, doc.branchId, body.participantIds, user.id);
-      if (body.kind === "IR" && body.content.howHappened) throw new DocumentError(400, "Only staff can provide their incident explanation.");
-      const result = await tx.staffDocument.updateMany({ where: { id, lockVersion, status: doc.status }, data: { title: body.title, workflowVersion: 2, initiatedByRole: user.role, recipientId: participants[0].staffId, recipientName: participants.map((p) => p.staffName).join(", "), content: body.content, contentHash: null, contentVersion: { increment: 1 }, lockVersion: { increment: 1 } } });
+
+      const result = await tx.staffDocument.updateMany({ where: { id, lockVersion, status: doc.status }, data: { title: body.title, workflowVersion: body.kind === "IR" ? 3 : 2, initiatedByRole: user.role, recipientId: participants[0].staffId, recipientName: participants.map((p) => p.staffName).join(", "), content: body.content, contentHash: null, contentVersion: { increment: 1 }, lockVersion: { increment: 1 } } });
       if (!result.count) throw new DocumentError(409, "This document changed. Refresh before editing.");
       await tx.documentParticipant.deleteMany({ where: { documentId: id } });
       await tx.documentParticipant.createMany({ data: participants.map((p) => ({ ...p, documentId: id })) });

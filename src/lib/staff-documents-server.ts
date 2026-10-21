@@ -72,18 +72,25 @@ export function documentHash(doc: {
 }) {
   const { id, kind, title, branchId, branchName, recipientId, recipientName, createdById, preparedByName, contentVersion, content, revision } = doc;
   const legacy = { id, kind, title, branchId, branchName, recipientId, recipientName, createdById, preparedByName, contentVersion, content, revision };
-  const value = doc.workflowVersion === 2 ? { ...legacy, workflowVersion: 2, initiatedByRole: doc.initiatedByRole, participants: (doc.participants || []).map(({ staffId, staffName }) => ({ staffId, staffName })).sort((a, b) => a.staffId.localeCompare(b.staffId)) } : legacy;
+  const value = (doc.workflowVersion || 1) >= 2 ? { ...legacy, workflowVersion: doc.workflowVersion, initiatedByRole: doc.initiatedByRole, participants: (doc.participants || []).map(({ staffId, staffName }) => ({ staffId, staffName })).sort((a, b) => a.staffId.localeCompare(b.staffId)) } : legacy;
   return createHash("sha256").update(canonical(value)).digest("hex");
 }
-export function participantResponseHash(contentHash: string, staffId: string, explanation: string, note: string) {
-  return createHash("sha256").update(canonical({ contentHash, staffId, explanation, note })).digest("hex");
+export function participantResponseHash(contentHash: string, staffId: string, explanation: string, note: string, reportHash?: string | null) {
+  return createHash("sha256").update(canonical({ contentHash, staffId, explanation, note, ...(reportHash ? { reportHash } : {}) })).digest("hex");
 }
-export function verifyParticipantResponses(doc: { contentHash: string | null; contentVersion: number; participants: { staffId: string; explanation: string; responseNote: string }[]; signatures: { contentVersion: number; purpose: string; signerId: string; responseHash: string | null }[] }) {
+export function sharedReportHash(contentHash: string, details: unknown, submittedById: string, submittedByName: string) {
+  return createHash("sha256").update(canonical({ contentHash, details, submittedById, submittedByName })).digest("hex");
+}
+export function verifyParticipantResponses(doc: { kind?: string; workflowVersion?: number; contentHash: string | null; contentVersion: number; incidentReport?: { details: unknown; submittedById: string; submittedByName: string; reportHash: string } | null; participants: { staffId: string; explanation: string; responseNote: string }[]; signatures: { contentVersion: number; purpose: string; signerId: string; responseHash: string | null; reportHash?: string | null }[] }) {
   if (!doc.contentHash) return;
+  const report = doc.incidentReport;
+  if (report && (sharedReportHash(doc.contentHash, report.details, report.submittedById, report.submittedByName) !== report.reportHash || !doc.participants.some((p) => p.staffId === report.submittedById))) throw new DocumentError(409, "The shared incident report failed its integrity check.");
   for (const sig of doc.signatures) {
-    if (sig.contentVersion !== doc.contentVersion || sig.purpose !== "acknowledged" || !sig.responseHash) continue;
+    if (sig.contentVersion !== doc.contentVersion || sig.purpose !== "acknowledged") continue;
+    if (doc.kind === "IR" && doc.workflowVersion === 3 && (!report || sig.reportHash !== report.reportHash || !sig.responseHash)) throw new DocumentError(409, "A staff signature does not match the shared incident report.");
+    if (!sig.responseHash) continue;
     const participant = doc.participants.find((p) => p.staffId === sig.signerId);
-    if (!participant || sig.responseHash !== participantResponseHash(doc.contentHash, sig.signerId, participant.explanation, participant.responseNote)) throw new DocumentError(409, "A staff response failed its signature integrity check. Contact management.");
+    if (!participant || sig.responseHash !== participantResponseHash(doc.contentHash, sig.signerId, participant.explanation, participant.responseNote, sig.reportHash)) throw new DocumentError(409, "A staff response failed its signature integrity check. Contact management.");
   }
 }
 export function validateSignature(image: string | undefined) {

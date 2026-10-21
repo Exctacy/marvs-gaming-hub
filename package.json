@@ -10,6 +10,7 @@
     "test:documents": "tsx --test tests/staff-documents.test.ts tests/staff-document-api.test.ts",
     "db:documents": "prisma db execute --schema prisma/schema.prisma --file prisma/updates/20261016_staff_documents.sql",
     "db:document-participants": "prisma db execute --schema prisma/schema.prisma --file prisma/updates/20261021_document_participants.sql",
+    "db:shared-ir": "prisma db execute --schema prisma/schema.prisma --file prisma/updates/20261021_shared_incident_report.sql",
     "postinstall": "prisma generate",
     "vercel-build": "prisma generate && next build",
     "db:generate": "prisma generate",
